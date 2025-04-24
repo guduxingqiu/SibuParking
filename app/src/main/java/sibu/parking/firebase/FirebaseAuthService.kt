@@ -1,4 +1,4 @@
-package parking.firebase
+package sibu.parking.firebase
 
 import android.content.Context
 import android.widget.Toast
@@ -6,8 +6,8 @@ import com.google.firebase.auth.FirebaseAuth
 import com.google.firebase.auth.FirebaseUser
 import com.google.firebase.firestore.FirebaseFirestore
 import kotlinx.coroutines.tasks.await
-import sibuparking.model.User
-import sibuparking.model.UserType
+import sibu.parking.model.User
+import sibu.parking.model.UserType
 
 class FirebaseAuthService {
     private val auth: FirebaseAuth = FirebaseAuth.getInstance()

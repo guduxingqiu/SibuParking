@@ -12,13 +12,13 @@ import androidx.compose.runtime.*
 import androidx.compose.ui.Modifier
 import androidx.lifecycle.lifecycleScope
 import kotlinx.coroutines.launch
-import parking.firebase.FirebaseAuthService
-import sibuparking.model.User
-import sibuparking.model.UserType
-import sibuparking.ui.screens.LoginScreen
-import sibuparking.ui.screens.StaffHomeScreen
-import sibuparking.ui.screens.UserHomeScreen
-import sibuparking.ui.theme.SibuParkingTheme
+import sibu.parking.firebase.FirebaseAuthService
+import sibu.parking.model.User
+import sibu.parking.model.UserType
+import sibu.parking.ui.screens.LoginScreen
+import sibu.parking.ui.screens.StaffHomeScreen
+import sibu.parking.ui.screens.UserHomeScreen
+import sibu.parking.ui.theme.SibuParkingTheme
 
 class MainActivity : ComponentActivity() {
     

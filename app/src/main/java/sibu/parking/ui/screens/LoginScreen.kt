@@ -1,4 +1,4 @@
-package sibuparking.ui.screens
+package sibu.parking.ui.screens
 
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.text.KeyboardOptions
@@ -18,7 +18,7 @@ import androidx.compose.ui.text.input.PasswordVisualTransformation
 import androidx.compose.ui.text.input.VisualTransformation
 import androidx.compose.ui.tooling.preview.Preview
 import androidx.compose.ui.unit.dp
-import sibuparking.model.UserType
+import sibu.parking.model.UserType
 
 enum class LoginType {
     Email, Phone, Username
