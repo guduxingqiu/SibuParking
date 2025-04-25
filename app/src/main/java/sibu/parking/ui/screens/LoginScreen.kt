@@ -27,7 +27,8 @@ enum class LoginType {
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
 fun LoginScreen(
-    onLoginClick: (String, String, UserType) -> Unit = { _, _, _ -> }
+    onLoginClick: (String, String, UserType) -> Unit = { _, _, _ -> },
+    onRegisterClick: () -> Unit = {}
 ) {
     var loginInput by remember { mutableStateOf("") }
     var password by remember { mutableStateOf("") }
@@ -59,7 +60,7 @@ fun LoginScreen(
             FilterChip(
                 selected = selectedUserType == UserType.USER,
                 onClick = { selectedUserType = UserType.USER },
-                label = { Text("User") },
+                label = { Text("用户") },
                 leadingIcon = {
                     Icon(
                         imageVector = Icons.Default.Person,
@@ -72,7 +73,7 @@ fun LoginScreen(
             FilterChip(
                 selected = selectedUserType == UserType.STAFF,
                 onClick = { selectedUserType = UserType.STAFF },
-                label = { Text("Staff") },
+                label = { Text("工作人员") },
                 leadingIcon = {
                     Icon(
                         imageVector = Icons.Default.Person,
@@ -182,7 +183,16 @@ fun LoginScreen(
                 .fillMaxWidth()
                 .height(50.dp)
         ) {
-            Text("Login")
+            Text("登录")
+        }
+        
+        Spacer(modifier = Modifier.height(16.dp))
+        
+        // Register Button
+        TextButton(
+            onClick = onRegisterClick
+        ) {
+            Text("没有账号？立即注册")
         }
     }
 }
