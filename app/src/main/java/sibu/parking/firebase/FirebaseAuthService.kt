@@ -8,30 +8,60 @@ import com.google.firebase.firestore.FirebaseFirestore
 import kotlinx.coroutines.tasks.await
 import sibu.parking.model.User
 import sibu.parking.model.UserType
+/*import com.google.firebase.firestore.Source
+import android.util.Log*/
 
 class FirebaseAuthService {
     private val auth: FirebaseAuth = FirebaseAuth.getInstance()
     private val firestore: FirebaseFirestore = FirebaseFirestore.getInstance()
     
-    // 获取当前登录用户
+    // Get current logged in user
     fun getCurrentUser(): FirebaseUser? {
         return auth.currentUser
     }
     
-    // 使用邮箱和密码注册
-    suspend fun registerWithEmail(email: String, password: String, userType: UserType): Result<FirebaseUser> {
+    // Check if username is unique
+    suspend fun isUsernameUnique(username: String): Boolean {
         return try {
-            val authResult = auth.createUserWithEmailAndPassword(email, password).await()
-            val firebaseUser = authResult.user ?: throw Exception("用户创建失败")
+            val querySnapshot = firestore.collection("users")
+                .whereEqualTo("username", username.trim().lowercase())
+                .get()
+                .await()
+                
+            querySnapshot.isEmpty
+        } catch (e: Exception) {
+            // If there's an error, conservatively return false
+            false
+            /*// 记录详细错误
+            Log.e("Auth", "Username check failed", e)
+            // 改为抛出异常而不是返回false
+            throw e*/
+        }
+    }
+    
+    // Register with email and password
+    suspend fun registerWithEmail(username: String, email: String, password: String): Result<FirebaseUser> {
+        return try {
+            // Check if username is unique first
+            if (!isUsernameUnique(username)) {
+                return Result.failure(Exception("Username already exists"))
+            }
             
-            // 在Firestore中创建用户数据
+            val authResult = auth.createUserWithEmailAndPassword(email, password).await()
+            val firebaseUser = authResult.user ?: throw Exception("User creation failed")
+            
+            // Send email verification
+            firebaseUser.sendEmailVerification().await()
+            
+            // Create user data in Firestore
             val user = User(
                 id = firebaseUser.uid,
                 email = email,
-                userType = userType
+                username = username,
+                userType = UserType.USER
             )
             
-            // 保存用户数据到Firestore
+            // Save user data to Firestore
             firestore.collection("users")
                 .document(firebaseUser.uid)
                 .set(user)
@@ -43,21 +73,21 @@ class FirebaseAuthService {
         }
     }
     
-    // 使用邮箱和密码登录
+    // Login with email and password
     suspend fun loginWithEmail(email: String, password: String): Result<User> {
         return try {
             val authResult = auth.signInWithEmailAndPassword(email, password).await()
-            val firebaseUser = authResult.user ?: throw Exception("登录失败")
+            val firebaseUser = authResult.user ?: throw Exception("Login failed")
             
-            // 从Firestore获取用户数据
+            // Get user data from Firestore
             val userDocument = firestore.collection("users")
                 .document(firebaseUser.uid)
                 .get()
                 .await()
                 
-            // 转换为User对象
+            // Convert to User object
             val user = userDocument.toObject(User::class.java) 
-                ?: throw Exception("用户数据不存在")
+                ?: throw Exception("User data not found")
                 
             Result.success(user)
         } catch (e: Exception) {
@@ -65,7 +95,57 @@ class FirebaseAuthService {
         }
     }
     
-    // 登出
+    // Login with username
+    suspend fun loginWithUsername(username: String, password: String): Result<User> {
+        return try {
+            // First find the user by username
+            val querySnapshot = firestore.collection("users")
+                .whereEqualTo("username", username.trim().lowercase())
+                .get()
+                .await()
+                
+            if (querySnapshot.isEmpty) {
+                throw Exception("User not found")
+            }
+            
+            // Get the user document
+            val userDoc = querySnapshot.documents.first()
+            val email = userDoc.getString("email") ?: throw Exception("User email not found")
+            
+            // Now login with email and password
+            loginWithEmail(email, password)
+        } catch (e: Exception) {
+            Result.failure(e)
+        }
+    }
+    
+    // Check if email is verified
+    fun isEmailVerified(): Boolean {
+        return auth.currentUser?.isEmailVerified ?: false
+    }
+    
+    // Send email verification again
+    suspend fun sendEmailVerificationAgain(): Result<Boolean> {
+        return try {
+            val user = auth.currentUser ?: throw Exception("No user is logged in")
+            user.sendEmailVerification().await()
+            Result.success(true)
+        } catch (e: Exception) {
+            Result.failure(e)
+        }
+    }
+    
+    // Send password reset email
+    suspend fun sendPasswordResetEmail(email: String): Result<Boolean> {
+        return try {
+            auth.sendPasswordResetEmail(email).await()
+            Result.success(true)
+        } catch (e: Exception) {
+            Result.failure(e)
+        }
+    }
+    
+    // Logout
     fun logout() {
         auth.signOut()
     }

@@ -16,9 +16,14 @@ import sibu.parking.firebase.FirebaseAuthService
 import sibu.parking.model.User
 import sibu.parking.model.UserType
 import sibu.parking.ui.screens.LoginScreen
+import sibu.parking.ui.screens.RegisterScreen
 import sibu.parking.ui.screens.StaffHomeScreen
 import sibu.parking.ui.screens.UserHomeScreen
 import sibu.parking.ui.theme.SibuParkingTheme
+
+enum class AppScreen {
+    LOGIN, REGISTER, USER_HOME, STAFF_HOME, EMAIL_VERIFICATION
+}
 
 class MainActivity : ComponentActivity() {
     
@@ -36,37 +41,80 @@ class MainActivity : ComponentActivity() {
                 ) {
                     var currentUser by remember { mutableStateOf<User?>(null) }
                     var isLoading by remember { mutableStateOf(false) }
+                    var currentScreen by remember { mutableStateOf(AppScreen.LOGIN) }
                     
                     when {
                         isLoading -> {
-                            // 可以在这里添加加载指示器
+                            // Add loading indicator here if needed
                         }
-                        currentUser == null -> {
+                        currentScreen == AppScreen.LOGIN -> {
                             LoginScreen(
-                                onLoginClick = { loginInput, password, userType ->
+                                onLoginClick = { loginInput, password ->
                                     isLoading = true
-                                    loginUser(loginInput, password, userType) { user ->
+                                    loginUser(loginInput, password) { user ->
                                         currentUser = user
+                                        isLoading = false
+                                        if (user != null) {
+                                            if (user.userType == UserType.STAFF) {
+                                                currentScreen = AppScreen.STAFF_HOME
+                                            } else {
+                                                currentScreen = AppScreen.USER_HOME
+                                            }
+                                        }
+                                    }
+                                },
+                                onRegisterClick = {
+                                    currentScreen = AppScreen.REGISTER
+                                },
+                                onForgotPasswordClick = { email ->
+                                    isLoading = true
+                                    forgotPassword(email) {
                                         isLoading = false
                                     }
                                 }
                             )
                         }
+                        currentScreen == AppScreen.REGISTER -> {
+                            RegisterScreen(
+                                onRegisterClick = { username, email, password ->
+                                    isLoading = true
+                                    registerUser(username, email, password) { success ->
+                                        isLoading = false
+                                        if (success) {
+                                            currentScreen = AppScreen.LOGIN
+                                            Toast.makeText(
+                                                this@MainActivity,
+                                                "Registration successful! A verification email has been sent.",
+                                                Toast.LENGTH_LONG
+                                            ).show()
+                                        }
+                                    }
+                                },
+                                onBackToLogin = {
+                                    currentScreen = AppScreen.LOGIN
+                                },
+                                checkUsernameExists = { username ->
+                                    !authService.isUsernameUnique(username)
+                                }
+                            )
+                        }
                         currentUser?.userType == UserType.STAFF -> {
                             StaffHomeScreen(
-                                username = currentUser?.email ?:"",
+                                username = currentUser?.username ?: currentUser?.email ?: "",
                                 onLogout = {
                                     authService.logout()
                                     currentUser = null
+                                    currentScreen = AppScreen.LOGIN
                                 }
                             )
                         }
                         else -> {
                             UserHomeScreen(
-                                username = currentUser?.email ?:"",
+                                username = currentUser?.username ?: currentUser?.email ?: "",
                                 onLogout = {
                                     authService.logout()
                                     currentUser = null
+                                    currentScreen = AppScreen.LOGIN
                                 }
                             )
                         }
@@ -76,40 +124,74 @@ class MainActivity : ComponentActivity() {
         }
     }
     
-    private fun loginUser(loginInput: String, password: String, userType: UserType, onResult: (User?) -> Unit) {
-        // 在实际应用中，这里会调用Firebase登录API
-        // 现在只是模拟登录过程
-        
+    private fun loginUser(loginInput: String, password: String, onResult: (User?) -> Unit) {
         lifecycleScope.launch {
             try {
-                //在实际应用中会使用以下代码：
-                val result = authService.loginWithEmail(loginInput, password)
+                // Check if login input is an email
+                val result = if (android.util.Patterns.EMAIL_ADDRESS.matcher(loginInput).matches()) {
+                    authService.loginWithEmail(loginInput, password)
+                } else {
+                    // Try to login with username
+                    authService.loginWithUsername(loginInput, password)
+                }
+                
                 if (result.isSuccess) {
                     onResult(result.getOrNull())
                 } else {
-                    Toast.makeText(this@MainActivity, "登录失败: ${result.exceptionOrNull()?.message}", Toast.LENGTH_SHORT).show()
+                    Toast.makeText(this@MainActivity, "Login failed: ${result.exceptionOrNull()?.message}", Toast.LENGTH_SHORT).show()
                     onResult(null)
                 }
                 
-                /*// 模拟登录:
+            } catch (e: Exception) {
+                Toast.makeText(this@MainActivity, "Login failed: ${e.message}", Toast.LENGTH_SHORT).show()
+                onResult(null)
+            }
+        }
+    }
+    
+    private fun registerUser(username: String, email: String, password: String, onResult: (Boolean) -> Unit) {
+        lifecycleScope.launch {
+            try {
+                val result = authService.registerWithEmail(username, email, password)
+                
+                if (result.isSuccess) {
+                    onResult(true)
+                } else {
+                    Toast.makeText(this@MainActivity, "Registration failed: ${result.exceptionOrNull()?.message}", Toast.LENGTH_SHORT).show()
+                    onResult(false)
+                }
+            } catch (e: Exception) {
+                Toast.makeText(this@MainActivity, "Registration failed: ${e.message}", Toast.LENGTH_SHORT).show()
+                onResult(false)
+            }
+        }
+    }
+    
+    private fun forgotPassword(email: String, onComplete: () -> Unit) {
+        lifecycleScope.launch {
+            try {
+                val result = authService.sendPasswordResetEmail(email)
+                if (result.isSuccess) {
+                    Toast.makeText(
+                        this@MainActivity,
+                        "Password reset mail has been sent, please check your mailbox",
+                        Toast.LENGTH_LONG
+                    ).show()
+                } else {
+                    Toast.makeText(
+                        this@MainActivity,
+                        "Failed to send password reset email: ${result.exceptionOrNull()?.message}",
+                        Toast.LENGTH_SHORT
+                    ).show()
+                }
+            } catch (e: Exception) {
                 Toast.makeText(
                     this@MainActivity,
-                    "登录类型: $userType, 账号: $loginInput",
+                    "Failed to send password reset email: ${e.message}",
                     Toast.LENGTH_SHORT
                 ).show()
-                
-                // 模拟一个成功登录，创建一个用户对象
-                val user = User(
-                    id = "user_id_1",
-                    email = loginInput,
-                    userType = userType
-                )
-                
-                onResult(user)*/
-                
-            } catch (e: Exception) {
-                Toast.makeText(this@MainActivity, "登录失败: ${e.message}", Toast.LENGTH_SHORT).show()
-                onResult(null)
+            } finally {
+                onComplete()
             }
         }
     }
