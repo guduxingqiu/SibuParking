@@ -1,4 +1,4 @@
-package sibu.parking.model
+    package sibu.parking.model
 
 enum class UserType {
     USER,
