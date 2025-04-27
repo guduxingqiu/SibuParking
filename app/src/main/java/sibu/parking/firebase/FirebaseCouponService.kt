@@ -5,9 +5,13 @@ import com.google.firebase.firestore.FirebaseFirestore
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.flow
 import kotlinx.coroutines.tasks.await
+import sibu.parking.model.Cart
+import sibu.parking.model.CartItem
+import sibu.parking.model.CouponType
 import sibu.parking.model.CouponUsage
 import sibu.parking.model.ParkingArea
 import sibu.parking.model.ParkingCoupon
+import sibu.parking.model.PaymentMethod
 import sibu.parking.model.Vehicle
 import java.util.UUID
 
@@ -33,6 +37,65 @@ class FirebaseCouponService {
             emit(coupons)
         } catch (e: Exception) {
             emit(emptyList())
+        }
+    }
+    
+    // Purchase coupons
+    suspend fun purchaseCoupons(
+        cart: Cart,
+        paymentMethod: PaymentMethod
+    ): Result<Boolean> {
+        return try {
+            val userId = auth.currentUser?.uid ?: return Result.failure(Exception("User not logged in"))
+            
+            // Simulate payment processing - in a real app, you would integrate with payment gateway
+            // For now, we'll just create the coupons
+            
+            val batch = firestore.batch()
+            
+            // Add each coupon to the batch
+            for (item in cart.items) {
+                repeat(item.quantity) {
+                    val coupon = ParkingCoupon(
+                        id = UUID.randomUUID().toString(),
+                        userId = userId,
+                        type = item.couponType,
+                        remainingUses = 10,
+                        purchaseDate = System.currentTimeMillis()
+                    )
+                    
+                    val docRef = firestore.collection("coupons").document(coupon.id)
+                    batch.set(docRef, coupon)
+                }
+            }
+            
+            // Record the purchase transaction
+            val transactionId = UUID.randomUUID().toString()
+            val transaction = hashMapOf(
+                "id" to transactionId,
+                "userId" to userId,
+                "items" to cart.items.map { 
+                    hashMapOf(
+                        "couponType" to it.couponType.name,
+                        "quantity" to it.quantity,
+                        "unitPrice" to it.getUnitPrice(),
+                        "totalPrice" to it.getTotalPrice()
+                    )
+                },
+                "totalAmount" to cart.getTotalPrice(),
+                "paymentMethod" to paymentMethod.name,
+                "timestamp" to System.currentTimeMillis()
+            )
+            
+            val transactionRef = firestore.collection("transactions").document(transactionId)
+            batch.set(transactionRef, transaction)
+            
+            // Commit all operations
+            batch.commit().await()
+            
+            Result.success(true)
+        } catch (e: Exception) {
+            Result.failure(e)
         }
     }
     

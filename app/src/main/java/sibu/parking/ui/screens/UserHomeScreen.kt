@@ -4,6 +4,7 @@ import androidx.compose.foundation.layout.*
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.CreditCard
 import androidx.compose.material.icons.filled.Logout
+import androidx.compose.material.icons.filled.ShoppingCart
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
@@ -16,7 +17,8 @@ import androidx.compose.ui.unit.dp
 fun UserHomeScreen(
     username: String,
     onLogout: () -> Unit,
-    onUseCouponClick: () -> Unit
+    onUseCouponClick: () -> Unit,
+    onBuyCouponClick: () -> Unit
 ) {
     Scaffold(
         topBar = {
@@ -69,6 +71,7 @@ fun UserHomeScreen(
                         modifier = Modifier
                             .fillMaxWidth()
                             .height(50.dp)
+                            .padding(bottom = 8.dp)
                     ) {
                         Icon(
                             imageVector = Icons.Default.CreditCard,
@@ -77,6 +80,22 @@ fun UserHomeScreen(
                         )
                         Spacer(Modifier.size(ButtonDefaults.IconSpacing))
                         Text("Use Coupon")
+                    }
+                    
+                    // Buy Coupon Button
+                    Button(
+                        onClick = onBuyCouponClick,
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .height(50.dp)
+                    ) {
+                        Icon(
+                            imageVector = Icons.Default.ShoppingCart,
+                            contentDescription = null,
+                            modifier = Modifier.size(ButtonDefaults.IconSize)
+                        )
+                        Spacer(Modifier.size(ButtonDefaults.IconSpacing))
+                        Text("Buy Coupon")
                     }
                     
                     // Additional user actions can be added here
@@ -92,6 +111,7 @@ fun UserHomeScreenPreview() {
     UserHomeScreen(
         username = "John Doe",
         onLogout = { },
-        onUseCouponClick = { }
+        onUseCouponClick = { },
+        onBuyCouponClick = { }
     )
 } 

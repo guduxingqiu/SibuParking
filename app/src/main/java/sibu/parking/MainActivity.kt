@@ -1,5 +1,7 @@
 package sibu.parking
 
+import android.content.Intent
+import android.net.Uri
 import android.os.Bundle
 import android.widget.Toast
 import androidx.activity.ComponentActivity
@@ -15,11 +17,15 @@ import kotlinx.coroutines.flow.collectLatest
 import kotlinx.coroutines.launch
 import sibu.parking.firebase.FirebaseAuthService
 import sibu.parking.firebase.FirebaseCouponService
+import sibu.parking.model.Cart
+import sibu.parking.model.CouponType
 import sibu.parking.model.ParkingArea
 import sibu.parking.model.ParkingCoupon
+import sibu.parking.model.PaymentMethod
 import sibu.parking.model.User
 import sibu.parking.model.UserType
 import sibu.parking.model.Vehicle
+import sibu.parking.ui.screens.BuyCouponScreen
 import sibu.parking.ui.screens.LoginScreen
 import sibu.parking.ui.screens.RegisterScreen
 import sibu.parking.ui.screens.StaffHomeScreen
@@ -28,7 +34,7 @@ import sibu.parking.ui.screens.UserHomeScreen
 import sibu.parking.ui.theme.SibuParkingTheme
 
 enum class AppScreen {
-    LOGIN, REGISTER, USER_HOME, STAFF_HOME, USE_COUPON, EMAIL_VERIFICATION
+    LOGIN, REGISTER, USER_HOME, STAFF_HOME, USE_COUPON, BUY_COUPON, EMAIL_VERIFICATION
 }
 
 class MainActivity : ComponentActivity() {
@@ -55,6 +61,9 @@ class MainActivity : ComponentActivity() {
                     var favoriteVehicles by remember { mutableStateOf<List<Vehicle>>(emptyList()) }
                     var favoriteParkingAreas by remember { mutableStateOf<List<ParkingArea>>(emptyList()) }
                     var isLoadingCoupons by remember { mutableStateOf(false) }
+                    
+                    // Shopping cart state
+                    val cart = remember { Cart() }
                     
                     // Load coupons when needed
                     fun loadCoupons() {
@@ -176,6 +185,51 @@ class MainActivity : ComponentActivity() {
                                 }
                             )
                         }
+                        currentScreen == AppScreen.BUY_COUPON -> {
+                            BuyCouponScreen(
+                                cart = cart,
+                                onAddToCart = { couponType ->
+                                    cart.addItem(couponType)
+                                    Toast.makeText(this@MainActivity, "Added to cart", Toast.LENGTH_SHORT).show()
+                                },
+                                onRemoveFromCart = { index ->
+                                    cart.removeItem(index)
+                                },
+                                onUpdateQuantity = { index, quantity ->
+                                    cart.updateQuantity(index, quantity)
+                                },
+                                onCheckout = { paymentMethod ->
+                                    if (cart.isEmpty()) {
+                                        Toast.makeText(this@MainActivity, "Cart is empty", Toast.LENGTH_SHORT).show()
+                                        return@BuyCouponScreen
+                                    }
+                                    
+                                    isLoading = true
+                                    
+                                    // Process payment and purchase coupons
+                                    purchaseCoupons(cart, paymentMethod) { success ->
+                                        isLoading = false
+                                        if (success) {
+                                            // Clear cart after successful purchase
+                                            cart.clear()
+                                            loadCoupons() // Reload coupons to reflect new purchases
+                                            currentScreen = AppScreen.USER_HOME
+                                            
+                                            // In a real app, you would redirect to payment gateway
+                                            // For now, we'll just show a success message
+                                            Toast.makeText(
+                                                this@MainActivity,
+                                                "Purchase successful! Coupons added to your account.",
+                                                Toast.LENGTH_LONG
+                                            ).show()
+                                        }
+                                    }
+                                },
+                                onBackClick = {
+                                    currentScreen = AppScreen.USER_HOME
+                                }
+                            )
+                        }
                         currentUser?.userType == UserType.STAFF -> {
                             StaffHomeScreen(
                                 username = currentUser?.username ?: currentUser?.email ?: "",
@@ -197,6 +251,9 @@ class MainActivity : ComponentActivity() {
                                 onUseCouponClick = {
                                     loadCoupons() // Refresh coupons
                                     currentScreen = AppScreen.USE_COUPON
+                                },
+                                onBuyCouponClick = {
+                                    currentScreen = AppScreen.BUY_COUPON
                                 }
                             )
                         }
@@ -320,5 +377,52 @@ class MainActivity : ComponentActivity() {
                 onComplete(false)
             }
         }
+    }
+    
+    private fun purchaseCoupons(
+        cart: Cart,
+        paymentMethod: PaymentMethod,
+        onComplete: (Boolean) -> Unit
+    ) {
+        lifecycleScope.launch {
+            try {
+                // Simulate payment gateway redirect
+                // In a real app, you would redirect to the payment gateway here
+                // After returning from the payment gateway, you would process the purchase
+                
+                // For demo purposes, let's just make a direct purchase
+                val result = couponService.purchaseCoupons(cart, paymentMethod)
+                
+                if (result.isSuccess) {
+                    onComplete(true)
+                } else {
+                    Toast.makeText(
+                        this@MainActivity,
+                        "Purchase failed: ${result.exceptionOrNull()?.message}",
+                        Toast.LENGTH_SHORT
+                    ).show()
+                    onComplete(false)
+                }
+            } catch (e: Exception) {
+                Toast.makeText(
+                    this@MainActivity,
+                    "Purchase failed: ${e.message}",
+                    Toast.LENGTH_SHORT
+                ).show()
+                onComplete(false)
+            }
+        }
+    }
+    
+    // Helper method for payment gateway redirect (in a real app)
+    private fun redirectToPaymentGateway(paymentMethod: PaymentMethod, amount: Double) {
+        // This is a placeholder. In a real app, you would redirect to the payment gateway.
+        val url = when (paymentMethod) {
+            PaymentMethod.ONLINE_BANKING -> "https://example.com/fpx-payment?amount=$amount"
+            PaymentMethod.E_WALLET -> "https://example.com/ewallet-payment?amount=$amount"
+        }
+        
+        val intent = Intent(Intent.ACTION_VIEW, Uri.parse(url))
+        startActivity(intent)
     }
 } 
