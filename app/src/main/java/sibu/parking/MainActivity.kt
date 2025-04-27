@@ -1,5 +1,7 @@
 package sibu.parking
 
+import android.content.Intent
+import android.net.Uri
 import android.os.Bundle
 import android.widget.Toast
 import androidx.activity.ComponentActivity
@@ -11,26 +13,35 @@ import androidx.compose.material3.Surface
 import androidx.compose.runtime.*
 import androidx.compose.ui.Modifier
 import androidx.lifecycle.lifecycleScope
-import com.google.firebase.auth.PhoneAuthCredential
-import com.google.firebase.auth.PhoneAuthProvider
+import kotlinx.coroutines.flow.collectLatest
 import kotlinx.coroutines.launch
 import sibu.parking.firebase.FirebaseAuthService
+import sibu.parking.firebase.FirebaseCouponService
+import sibu.parking.model.Cart
+import sibu.parking.model.CouponType
+import sibu.parking.model.ParkingArea
+import sibu.parking.model.ParkingCoupon
+import sibu.parking.model.PaymentMethod
 import sibu.parking.model.User
 import sibu.parking.model.UserType
+import sibu.parking.model.Vehicle
+import sibu.parking.ui.screens.BuyCouponScreen
 import sibu.parking.ui.screens.LoginScreen
 import sibu.parking.ui.screens.RegisterScreen
 import sibu.parking.ui.screens.StaffHomeScreen
+import sibu.parking.ui.screens.UseCouponScreen
 import sibu.parking.ui.screens.UserHomeScreen
 import sibu.parking.ui.screens.VerificationType
 import sibu.parking.ui.theme.SibuParkingTheme
 
 enum class AppScreen {
-    LOGIN, REGISTER, USER_HOME, STAFF_HOME
+    LOGIN, REGISTER, USER_HOME, STAFF_HOME, USE_COUPON, BUY_COUPON, EMAIL_VERIFICATION
 }
 
 class MainActivity : ComponentActivity() {
     
     private val authService = FirebaseAuthService()
+    private val couponService = FirebaseCouponService()
     
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
@@ -46,22 +57,64 @@ class MainActivity : ComponentActivity() {
                     var isLoading by remember { mutableStateOf(false) }
                     var currentScreen by remember { mutableStateOf(AppScreen.LOGIN) }
                     
-                    // 临时存储注册信息
-                    var registerUsername by remember { mutableStateOf("") }
-                    var registerEmail by remember { mutableStateOf("") }
-                    var registerPhone by remember { mutableStateOf("") }
-                    var registerPassword by remember { mutableStateOf("") }
-                    var registerUserType by remember { mutableStateOf(UserType.USER) }
-                    var verificationId by remember { mutableStateOf("") }
-                    var phoneAuthCredential by remember { mutableStateOf<PhoneAuthCredential?>(null) }
+                    // State for coupons
+                    var userCoupons by remember { mutableStateOf<List<ParkingCoupon>>(emptyList()) }
+                    var favoriteVehicles by remember { mutableStateOf<List<Vehicle>>(emptyList()) }
+                    var favoriteParkingAreas by remember { mutableStateOf<List<ParkingArea>>(emptyList()) }
+                    var isLoadingCoupons by remember { mutableStateOf(false) }
+                    
+                    // Shopping cart state
+                    val cart = remember { Cart() }
+                    
+                    // Load coupons when needed
+                    fun loadCoupons() {
+                        isLoadingCoupons = true
+                        lifecycleScope.launch {
+                            try {
+                                couponService.getUserCoupons().collectLatest { coupons ->
+                                    userCoupons = coupons
+                                    isLoadingCoupons = false
+                                }
+                            } catch (e: Exception) {
+                                Toast.makeText(this@MainActivity, "Failed to load coupons: ${e.message}", Toast.LENGTH_SHORT).show()
+                                isLoadingCoupons = false
+                            }
+                        }
+                    }
+                    
+                    // Load favorite vehicles
+                    fun loadFavoriteVehicles() {
+                        lifecycleScope.launch {
+                            try {
+                                couponService.getFavoriteVehicles().collectLatest { vehicles ->
+                                    favoriteVehicles = vehicles
+                                }
+                            } catch (e: Exception) {
+                                // Silent fail
+                            }
+                        }
+                    }
+                    
+                    // Load favorite parking areas
+                    fun loadFavoriteParkingAreas() {
+                        lifecycleScope.launch {
+                            try {
+                                couponService.getFavoriteParkingAreas().collectLatest { areas ->
+                                    favoriteParkingAreas = areas
+                                }
+                            } catch (e: Exception) {
+                                // Silent fail
+                            }
+                        }
+                    }
                     
                     when {
                         isLoading -> {
-                            // 可以在这里添加加载指示器
+                            // Add loading indicator here if needed
                         }
-                        currentScreen == AppScreen.LOGIN && currentUser == null -> {
+                        currentScreen == AppScreen.LOGIN -> {
                             LoginScreen(
-                                onLoginClick = { loginInput, password, userType ->
+                                onLoginClick = { loginInput, password ->
                                     isLoading = true
                                     loginUser(loginInput, password) { user ->
                                         currentUser = user
@@ -71,12 +124,110 @@ class MainActivity : ComponentActivity() {
                                                 currentScreen = AppScreen.STAFF_HOME
                                             } else {
                                                 currentScreen = AppScreen.USER_HOME
+                                                loadCoupons()
+                                                loadFavoriteVehicles()
+                                                loadFavoriteParkingAreas()
                                             }
                                         }
                                     }
                                 },
                                 onRegisterClick = {
                                     currentScreen = AppScreen.REGISTER
+                                },
+                                onForgotPasswordClick = { email ->
+                                    isLoading = true
+                                    forgotPassword(email) {
+                                        isLoading = false
+                                    }
+                                }
+                            )
+                        }
+                        currentScreen == AppScreen.REGISTER -> {
+                            RegisterScreen(
+                                onRegisterClick = { username, email, password ->
+                                    isLoading = true
+                                    registerUser(username, email, password) { success ->
+                                        isLoading = false
+                                        if (success) {
+                                            currentScreen = AppScreen.LOGIN
+                                            Toast.makeText(
+                                                this@MainActivity,
+                                                "Registration successful! A verification email has been sent.",
+                                                Toast.LENGTH_LONG
+                                            ).show()
+                                        }
+                                    }
+                                },
+                                onBackToLogin = {
+                                    currentScreen = AppScreen.LOGIN
+                                },
+                                checkUsernameExists = { username ->
+                                    !authService.isUsernameUnique(username)
+                                }
+                            )
+                        }
+                        currentScreen == AppScreen.USE_COUPON -> {
+                            UseCouponScreen(
+                                coupons = userCoupons,
+                                favoriteVehicles = favoriteVehicles,
+                                favoriteParkingAreas = favoriteParkingAreas,
+                                isLoading = isLoadingCoupons,
+                                onBackClick = {
+                                    currentScreen = AppScreen.USER_HOME
+                                },
+                                onUseCoupon = { couponId, usedCount, parkingArea, parkingLotNumber, vehicleNumber ->
+                                    isLoading = true
+                                    useCoupon(couponId, usedCount, parkingArea, parkingLotNumber, vehicleNumber) { success ->
+                                        isLoading = false
+                                        if (success) {
+                                            loadCoupons() // Reload coupons after use
+                                        }
+                                    }
+                                }
+                            )
+                        }
+                        currentScreen == AppScreen.BUY_COUPON -> {
+                            BuyCouponScreen(
+                                cart = cart,
+                                onAddToCart = { couponType ->
+                                    cart.addItem(couponType)
+                                    Toast.makeText(this@MainActivity, "Added to cart", Toast.LENGTH_SHORT).show()
+                                },
+                                onRemoveFromCart = { index ->
+                                    cart.removeItem(index)
+                                },
+                                onUpdateQuantity = { index, quantity ->
+                                    cart.updateQuantity(index, quantity)
+                                },
+                                onCheckout = { paymentMethod ->
+                                    if (cart.isEmpty()) {
+                                        Toast.makeText(this@MainActivity, "Cart is empty", Toast.LENGTH_SHORT).show()
+                                        return@BuyCouponScreen
+                                    }
+                                    
+                                    isLoading = true
+                                    
+                                    // Process payment and purchase coupons
+                                    purchaseCoupons(cart, paymentMethod) { success ->
+                                        isLoading = false
+                                        if (success) {
+                                            // Clear cart after successful purchase
+                                            cart.clear()
+                                            loadCoupons() // Reload coupons to reflect new purchases
+                                            currentScreen = AppScreen.USER_HOME
+                                            
+                                            // In a real app, you would redirect to payment gateway
+                                            // For now, we'll just show a success message
+                                            Toast.makeText(
+                                                this@MainActivity,
+                                                "Purchase successful! Coupons added to your account.",
+                                                Toast.LENGTH_LONG
+                                            ).show()
+                                        }
+                                    }
+                                },
+                                onBackClick = {
+                                    currentScreen = AppScreen.USER_HOME
                                 }
                             )
                         }
@@ -219,6 +370,13 @@ class MainActivity : ComponentActivity() {
                                     authService.logout()
                                     currentUser = null
                                     currentScreen = AppScreen.LOGIN
+                                },
+                                onUseCouponClick = {
+                                    loadCoupons() // Refresh coupons
+                                    currentScreen = AppScreen.USE_COUPON
+                                },
+                                onBuyCouponClick = {
+                                    currentScreen = AppScreen.BUY_COUPON
                                 }
                             )
                         }
@@ -228,120 +386,166 @@ class MainActivity : ComponentActivity() {
         }
     }
     
-    // 登录用户
     private fun loginUser(loginInput: String, password: String, onResult: (User?) -> Unit) {
         lifecycleScope.launch {
             try {
-                val result = authService.loginWithEmail(loginInput, password)
+                // Check if login input is an email
+                val result = if (android.util.Patterns.EMAIL_ADDRESS.matcher(loginInput).matches()) {
+                    authService.loginWithEmail(loginInput, password)
+                } else {
+                    // Try to login with username
+                    authService.loginWithUsername(loginInput, password)
+                }
+                
                 if (result.isSuccess) {
                     onResult(result.getOrNull())
                 } else {
-                    Toast.makeText(this@MainActivity, "登录失败: ${result.exceptionOrNull()?.message}", Toast.LENGTH_SHORT).show()
+                    Toast.makeText(this@MainActivity, "Login failed: ${result.exceptionOrNull()?.message}", Toast.LENGTH_SHORT).show()
                     onResult(null)
                 }
+                
             } catch (e: Exception) {
-                Toast.makeText(this@MainActivity, "登录失败: ${e.message}", Toast.LENGTH_SHORT).show()
+                Toast.makeText(this@MainActivity, "Login failed: ${e.message}", Toast.LENGTH_SHORT).show()
                 onResult(null)
             }
         }
     }
     
-    // 注册用户
-    private fun registerUser(
-        username: String,
-        email: String,
-        phone: String,
-        password: String,
-        userType: UserType,
-        phoneAuthCredential: PhoneAuthCredential?,
-        onResult: (Boolean) -> Unit
-    ) {
+    private fun registerUser(username: String, email: String, password: String, onResult: (Boolean) -> Unit) {
         lifecycleScope.launch {
             try {
-                val result = if (phoneAuthCredential != null) {
-                    // 使用手机验证注册
-                    authService.registerWithPhone(username, email, phone, password, phoneAuthCredential, userType)
-                } else {
-                    // 使用邮箱密码注册
-                    authService.registerWithEmail(username, email, phone, password, userType)
-                }
+                val result = authService.registerWithEmail(username, email, password)
                 
                 if (result.isSuccess) {
                     onResult(true)
                 } else {
-                    Toast.makeText(this@MainActivity, "注册失败: ${result.exceptionOrNull()?.message}", Toast.LENGTH_SHORT).show()
+                    Toast.makeText(this@MainActivity, "Registration failed: ${result.exceptionOrNull()?.message}", Toast.LENGTH_SHORT).show()
                     onResult(false)
                 }
             } catch (e: Exception) {
-                Toast.makeText(this@MainActivity, "注册失败: ${e.message}", Toast.LENGTH_SHORT).show()
+                Toast.makeText(this@MainActivity, "Registration failed: ${e.message}", Toast.LENGTH_SHORT).show()
                 onResult(false)
             }
         }
     }
     
-    // 发送邮箱验证
-    private fun sendEmailVerification(email: String, onResult: (Boolean) -> Unit) {
+    private fun forgotPassword(email: String, onComplete: () -> Unit) {
         lifecycleScope.launch {
             try {
-                val result = authService.sendEmailVerification(email)
+                val result = authService.sendPasswordResetEmail(email)
                 if (result.isSuccess) {
-                    onResult(true)
+                    Toast.makeText(
+                        this@MainActivity,
+                        "Password reset mail has been sent, please check your mailbox",
+                        Toast.LENGTH_LONG
+                    ).show()
                 } else {
-                    Toast.makeText(this@MainActivity, "发送验证邮件失败: ${result.exceptionOrNull()?.message}", Toast.LENGTH_SHORT).show()
-                    onResult(false)
+                    Toast.makeText(
+                        this@MainActivity,
+                        "Failed to send password reset email: ${result.exceptionOrNull()?.message}",
+                        Toast.LENGTH_SHORT
+                    ).show()
                 }
             } catch (e: Exception) {
-                Toast.makeText(this@MainActivity, "发送验证邮件失败: ${e.message}", Toast.LENGTH_SHORT).show()
-                onResult(false)
+                Toast.makeText(
+                    this@MainActivity,
+                    "Failed to send password reset email: ${e.message}",
+                    Toast.LENGTH_SHORT
+                ).show()
+            } finally {
+                onComplete()
             }
         }
     }
     
-    // 发送手机验证码
-    private fun sendPhoneVerification(
-        phoneNumber: String,
-        onVerificationCompleted: (PhoneAuthCredential) -> Unit,
-        onVerificationFailed: (Exception) -> Unit,
-        onCodeSent: (String, PhoneAuthProvider.ForceResendingToken) -> Unit
+    private fun useCoupon(
+        couponId: String, 
+        usedCount: Int, 
+        parkingArea: String, 
+        parkingLotNumber: String, 
+        vehicleNumber: String, 
+        onComplete: (Boolean) -> Unit
     ) {
-        authService.sendPhoneVerification(
-            phoneNumber,
-            this,
-            onCodeSent,
-            onVerificationCompleted,
-            onVerificationFailed
-        )
-    }
-    
-    // 重新发送手机验证码
-    private fun resendPhoneVerification(
-        phoneNumber: String,
-        onVerificationFailed: (Exception) -> Unit,
-        onCodeSent: (String, PhoneAuthProvider.ForceResendingToken) -> Unit
-    ) {
-        authService.resendPhoneVerification(
-            phoneNumber,
-            this,
-            onCodeSent,
-            onVerificationFailed
-        )
-    }
-    
-    // 验证手机验证码
-    private fun verifyPhoneCode(code: String, onResult: (PhoneAuthCredential?) -> Unit) {
         lifecycleScope.launch {
             try {
-                val result = authService.verifyPhoneCode(code)
+                val result = couponService.useCoupon(
+                    couponId = couponId,
+                    usedCount = usedCount,
+                    parkingArea = parkingArea,
+                    parkingLotNumber = parkingLotNumber,
+                    vehicleNumber = vehicleNumber
+                )
+                
                 if (result.isSuccess) {
-                    onResult(result.getOrNull())
+                    Toast.makeText(
+                        this@MainActivity,
+                        "Coupon used successfully!",
+                        Toast.LENGTH_SHORT
+                    ).show()
+                    onComplete(true)
                 } else {
-                    Toast.makeText(this@MainActivity, "验证失败: ${result.exceptionOrNull()?.message}", Toast.LENGTH_SHORT).show()
-                    onResult(null)
+                    Toast.makeText(
+                        this@MainActivity,
+                        "Failed to use coupon: ${result.exceptionOrNull()?.message}",
+                        Toast.LENGTH_SHORT
+                    ).show()
+                    onComplete(false)
                 }
             } catch (e: Exception) {
-                Toast.makeText(this@MainActivity, "验证失败: ${e.message}", Toast.LENGTH_SHORT).show()
-                onResult(null)
+                Toast.makeText(
+                    this@MainActivity,
+                    "Failed to use coupon: ${e.message}",
+                    Toast.LENGTH_SHORT
+                ).show()
+                onComplete(false)
             }
         }
+    }
+    
+    private fun purchaseCoupons(
+        cart: Cart,
+        paymentMethod: PaymentMethod,
+        onComplete: (Boolean) -> Unit
+    ) {
+        lifecycleScope.launch {
+            try {
+                // Simulate payment gateway redirect
+                // In a real app, you would redirect to the payment gateway here
+                // After returning from the payment gateway, you would process the purchase
+                
+                // For demo purposes, let's just make a direct purchase
+                val result = couponService.purchaseCoupons(cart, paymentMethod)
+                
+                if (result.isSuccess) {
+                    onComplete(true)
+                } else {
+                    Toast.makeText(
+                        this@MainActivity,
+                        "Purchase failed: ${result.exceptionOrNull()?.message}",
+                        Toast.LENGTH_SHORT
+                    ).show()
+                    onComplete(false)
+                }
+            } catch (e: Exception) {
+                Toast.makeText(
+                    this@MainActivity,
+                    "Purchase failed: ${e.message}",
+                    Toast.LENGTH_SHORT
+                ).show()
+                onComplete(false)
+            }
+        }
+    }
+    
+    // Helper method for payment gateway redirect (in a real app)
+    private fun redirectToPaymentGateway(paymentMethod: PaymentMethod, amount: Double) {
+        // This is a placeholder. In a real app, you would redirect to the payment gateway.
+        val url = when (paymentMethod) {
+            PaymentMethod.ONLINE_BANKING -> "https://example.com/fpx-payment?amount=$amount"
+            PaymentMethod.E_WALLET -> "https://example.com/ewallet-payment?amount=$amount"
+        }
+        
+        val intent = Intent(Intent.ACTION_VIEW, Uri.parse(url))
+        startActivity(intent)
     }
 } 

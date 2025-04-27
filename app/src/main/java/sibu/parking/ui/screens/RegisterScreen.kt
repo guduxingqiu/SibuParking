@@ -10,16 +10,15 @@ import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.text.input.KeyboardType
 import androidx.compose.ui.text.input.PasswordVisualTransformation
 import androidx.compose.ui.text.input.VisualTransformation
 import androidx.compose.ui.tooling.preview.Preview
 import androidx.compose.ui.unit.dp
-import sibu.parking.model.UserType
-
-enum class VerificationType {
-    EMAIL, PHONE
-}
+import kotlinx.coroutines.Job
+import kotlinx.coroutines.delay
+import kotlinx.coroutines.launch
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
@@ -27,84 +26,96 @@ fun RegisterScreen(
     onRegisterClick: (
         username: String,
         email: String, 
-        phone: String, 
-        password: String, 
-        userType: UserType
-    ) -> Unit = { _, _, _, _, _ -> },
-    onBackToLogin: () -> Unit = {}
+        password: String
+    ) -> Unit = { _, _, _ -> },
+    onBackToLogin: () -> Unit = {},
+    checkUsernameExists: suspend (String) -> Boolean = { false }
 ) {
     var username by remember { mutableStateOf("") }
     var email by remember { mutableStateOf("") }
-    var phone by remember { mutableStateOf("") }
     var password by remember { mutableStateOf("") }
     var confirmPassword by remember { mutableStateOf("") }
     var passwordVisible by remember { mutableStateOf(false) }
     var confirmPasswordVisible by remember { mutableStateOf(false) }
-    var selectedUserType by remember { mutableStateOf(UserType.USER) }
     
-    // 验证状态
-    var verificationType by remember { mutableStateOf(VerificationType.EMAIL) }
-    var isVerificationSent by remember { mutableStateOf(false) }
-    var otpCode by remember { mutableStateOf("") }
+    // Username verification status
+    var isCheckingUsername by remember { mutableStateOf(false) }
+    var isUsernameAvailable by remember { mutableStateOf<Boolean?>(null) }
     
-    // 表单验证
+    // Form validation
     var usernameError by remember { mutableStateOf<String?>(null) }
     var emailError by remember { mutableStateOf<String?>(null) }
-    var phoneError by remember { mutableStateOf<String?>(null) }
     var passwordError by remember { mutableStateOf<String?>(null) }
     var confirmPasswordError by remember { mutableStateOf<String?>(null) }
     
-    // 验证表单
+    val coroutineScope = rememberCoroutineScope()
+    var usernameCheckJob: Job? = remember { null }
+    
+    // Debounced username check
+    fun checkUsername(input: String) {
+        if (input.length < 3) {
+            isUsernameAvailable = null
+            return
+        }
+        
+        usernameCheckJob?.cancel()
+        usernameCheckJob = coroutineScope.launch {
+            isCheckingUsername = true
+            delay(500) // Debounce
+            try {
+                val exists = checkUsernameExists(input)
+                isUsernameAvailable = !exists
+            } catch (e: Exception) {
+                isUsernameAvailable = null
+            } finally {
+                isCheckingUsername = false
+            }
+        }
+    }
+    
+    // Validate form
     fun validateForm(): Boolean {
         var isValid = true
         
-        // 验证用户名
+        // Validate username
         if (username.isEmpty()) {
-            usernameError = "用户名不能为空"
+            usernameError = "Username cannot be empty"
+            isValid = false
+        } else if (isUsernameAvailable == false) {
+            usernameError = "Username already exists"
             isValid = false
         } else {
             usernameError = null
         }
         
-        // 验证邮箱
+        // Validate email
         if (email.isEmpty()) {
-            emailError = "邮箱不能为空"
+            emailError = "Email cannot be empty"
             isValid = false
         } else if (!android.util.Patterns.EMAIL_ADDRESS.matcher(email).matches()) {
-            emailError = "邮箱格式不正确"
+            emailError = "Invalid email format"
             isValid = false
         } else {
             emailError = null
         }
         
-        // 验证手机号
-        if (phone.isEmpty()) {
-            phoneError = "手机号不能为空"
-            isValid = false
-        } else if (!android.util.Patterns.PHONE.matcher(phone).matches()) {
-            phoneError = "手机号格式不正确"
-            isValid = false
-        } else {
-            phoneError = null
-        }
-        
-        // 验证密码
+        // Validate password
         if (password.isEmpty()) {
-            passwordError = "密码不能为空"
+            passwordError = "Password cannot be empty"
             isValid = false
         } else if (password.length < 6) {
-            passwordError = "密码长度不能少于6位"
+            passwordError = "Password must be at least 6 characters"
             isValid = false
         } else {
             passwordError = null
         }
         
-        // 验证确认密码
+        // Validate confirm password
         if (confirmPassword.isEmpty()) {
-            confirmPasswordError = "确认密码不能为空"
+            confirmPasswordError = "Confirm password cannot be empty"
             isValid = false
         } else if (confirmPassword != password) {
-            confirmPasswordError = "两次输入的密码不一致"
+            confirmPasswordError = "Passwords do not match"
             isValid = false
         } else {
             confirmPasswordError = null
@@ -122,52 +133,21 @@ fun RegisterScreen(
             .verticalScroll(scrollState),
         horizontalAlignment = Alignment.CenterHorizontally
     ) {
-        // 标题
+        // Title
         Text(
-            text = "注册新账户",
+            text = "Create New Account",
             style = MaterialTheme.typography.headlineMedium,
             modifier = Modifier.padding(bottom = 24.dp, top = 16.dp)
         )
         
-        // 用户类型选择
-        Row(
-            modifier = Modifier
-                .fillMaxWidth()
-                .padding(bottom = 16.dp),
-            horizontalArrangement = Arrangement.SpaceEvenly
-        ) {
-            FilterChip(
-                selected = selectedUserType == UserType.USER,
-                onClick = { selectedUserType = UserType.USER },
-                label = { Text("用户") },
-                leadingIcon = {
-                    Icon(
-                        imageVector = Icons.Default.Person,
-                        contentDescription = null,
-                        modifier = Modifier.size(18.dp)
-                    )
-                }
-            )
-            
-            FilterChip(
-                selected = selectedUserType == UserType.STAFF,
-                onClick = { selectedUserType = UserType.STAFF },
-                label = { Text("工作人员") },
-                leadingIcon = {
-                    Icon(
-                        imageVector = Icons.Default.AdminPanelSettings,
-                        contentDescription = null,
-                        modifier = Modifier.size(18.dp)
-                    )
-                }
-            )
-        }
-        
-        // 用户名输入框
+        // Username input
         OutlinedTextField(
             value = username,
-            onValueChange = { username = it },
-            label = { Text("用户名") },
+            onValueChange = { 
+                username = it
+                checkUsername(it)
+            },
+            label = { Text("Username") },
             singleLine = true,
             isError = usernameError != null,
             supportingText = { usernameError?.let { Text(it) } },
@@ -179,14 +159,38 @@ fun RegisterScreen(
                     imageVector = Icons.Default.Person,
                     contentDescription = null
                 )
+            },
+            trailingIcon = {
+                when {
+                    isCheckingUsername -> {
+                        CircularProgressIndicator(
+                            modifier = Modifier.size(24.dp),
+                            strokeWidth = 2.dp
+                        )
+                    }
+                    isUsernameAvailable == true -> {
+                        Icon(
+                            imageVector = Icons.Default.CheckCircle,
+                            contentDescription = "Username available",
+                            tint = Color.Green
+                        )
+                    }
+                    isUsernameAvailable == false -> {
+                        Icon(
+                            imageVector = Icons.Default.Cancel,
+                            contentDescription = "Username unavailable",
+                            tint = Color.Red
+                        )
+                    }
+                }
             }
         )
         
-        // 邮箱输入框
+        // Email input
         OutlinedTextField(
             value = email,
             onValueChange = { email = it },
-            label = { Text("电子邮箱") },
+            label = { Text("Email") },
             singleLine = true,
             isError = emailError != null,
             supportingText = { emailError?.let { Text(it) } },
@@ -202,31 +206,11 @@ fun RegisterScreen(
             }
         )
         
-        // 手机号输入框
-        OutlinedTextField(
-            value = phone,
-            onValueChange = { phone = it },
-            label = { Text("手机号码") },
-            singleLine = true,
-            isError = phoneError != null,
-            supportingText = { phoneError?.let { Text(it) } },
-            modifier = Modifier
-                .fillMaxWidth()
-                .padding(bottom = 8.dp),
-            keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Phone),
-            leadingIcon = {
-                Icon(
-                    imageVector = Icons.Default.Phone,
-                    contentDescription = null
-                )
-            }
-        )
-        
-        // 密码输入框
+        // Password input
         OutlinedTextField(
             value = password,
             onValueChange = { password = it },
-            label = { Text("密码") },
+            label = { Text("Password") },
             singleLine = true,
             isError = passwordError != null,
             supportingText = { passwordError?.let { Text(it) } },
@@ -246,7 +230,7 @@ fun RegisterScreen(
                     Icons.Default.VisibilityOff
                 else Icons.Default.Visibility
 
-                val description = if (passwordVisible) "隐藏密码" else "显示密码"
+                val description = if (passwordVisible) "Hide password" else "Show password"
 
                 IconButton(onClick = { passwordVisible = !passwordVisible }) {
                     Icon(imageVector = image, contentDescription = description)
@@ -254,11 +238,11 @@ fun RegisterScreen(
             }
         )
         
-        // 确认密码输入框
+        // Confirm password input
         OutlinedTextField(
             value = confirmPassword,
             onValueChange = { confirmPassword = it },
-            label = { Text("确认密码") },
+            label = { Text("Confirm Password") },
             singleLine = true,
             isError = confirmPasswordError != null,
             supportingText = { confirmPasswordError?.let { Text(it) } },
@@ -278,7 +262,7 @@ fun RegisterScreen(
                     Icons.Default.VisibilityOff
                 else Icons.Default.Visibility
 
-                val description = if (confirmPasswordVisible) "隐藏密码" else "显示密码"
+                val description = if (confirmPasswordVisible) "Hide password" else "Show password"
 
                 IconButton(onClick = { confirmPasswordVisible = !confirmPasswordVisible }) {
                     Icon(imageVector = image, contentDescription = description)
@@ -286,116 +270,63 @@ fun RegisterScreen(
             }
         )
         
-        // 选择验证方式
-        Row(
-            modifier = Modifier
-                .fillMaxWidth()
-                .padding(bottom = 16.dp),
-            horizontalArrangement = Arrangement.SpaceEvenly
-        ) {
-            FilterChip(
-                selected = verificationType == VerificationType.EMAIL,
-                onClick = { verificationType = VerificationType.EMAIL },
-                label = { Text("邮箱验证") },
-                leadingIcon = {
-                    Icon(
-                        imageVector = Icons.Default.Email,
-                        contentDescription = null,
-                        modifier = Modifier.size(18.dp)
-                    )
-                }
-            )
-            
-            FilterChip(
-                selected = verificationType == VerificationType.PHONE,
-                onClick = { verificationType = VerificationType.PHONE },
-                label = { Text("手机验证") },
-                leadingIcon = {
-                    Icon(
-                        imageVector = Icons.Default.Phone,
-                        contentDescription = null,
-                        modifier = Modifier.size(18.dp)
-                    )
-                }
-            )
-        }
+        Spacer(modifier = Modifier.height(16.dp))
         
-        // OTP验证码部分
-        if (isVerificationSent) {
-            // 验证码输入
-            OutlinedTextField(
-                value = otpCode,
-                onValueChange = { otpCode = it },
-                label = { Text("验证码") },
-                singleLine = true,
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .padding(bottom = 16.dp),
-                keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Number),
-                leadingIcon = {
-                    Icon(
-                        imageVector = Icons.Default.Dialpad,
-                        contentDescription = null
-                    )
-                }
-            )
-            
-            Button(
-                onClick = { /* 验证OTP */ },
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .height(50.dp)
-            ) {
-                Text("验证")
-            }
-            
-            Spacer(modifier = Modifier.height(8.dp))
-            
-            TextButton(
-                onClick = { /* 重新发送OTP */ }
-            ) {
-                Text("重新发送验证码")
-            }
-        } else {
-            // 发送验证码按钮
-            Button(
-                onClick = { 
-                    if (validateForm()) {
-                        isVerificationSent = true
-                    }
-                },
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .height(50.dp)
-            ) {
-                Text("发送验证码")
-            }
-        }
-        
-        Spacer(modifier = Modifier.height(8.dp))
-        
-        // 注册按钮，只有验证成功后才能点击
+        // Register Button
         Button(
             onClick = { 
-                if (isVerificationSent && otpCode.isNotEmpty()) {
-                    onRegisterClick(username, email, phone, password, selectedUserType)
+                if (validateForm()) {
+                    onRegisterClick(username, email, password)
                 }
             },
-            enabled = isVerificationSent && otpCode.isNotEmpty(),
             modifier = Modifier
                 .fillMaxWidth()
                 .height(50.dp)
         ) {
-            Text("注册")
+            Text("Register")
         }
         
         Spacer(modifier = Modifier.height(16.dp))
         
-        // 返回登录页面
+        // Back to login
         TextButton(
             onClick = onBackToLogin
         ) {
-            Text("已有账号？返回登录")
+            Text("Already have an account? Login")
+        }
+        
+        Spacer(modifier = Modifier.height(16.dp))
+        
+        // Note about email verification
+        Card(
+            modifier = Modifier
+                .fillMaxWidth()
+                .padding(8.dp)
+        ) {
+            Column(
+                modifier = Modifier.padding(16.dp)
+            ) {
+                Row(
+                    verticalAlignment = Alignment.CenterVertically
+                ) {
+                    Icon(
+                        imageVector = Icons.Default.Info,
+                        contentDescription = null,
+                        tint = MaterialTheme.colorScheme.primary
+                    )
+                    Spacer(modifier = Modifier.width(8.dp))
+                    Text(
+                        text = "Email Verification",
+                        style = MaterialTheme.typography.titleMedium
+                    )
+                }
+                
+                Spacer(modifier = Modifier.height(8.dp))
+                
+                Text(
+                    text = "After registration, a verification link will be sent to your email. Please verify your email to complete the registration process."
+                )
+            }
         }
     }
 }

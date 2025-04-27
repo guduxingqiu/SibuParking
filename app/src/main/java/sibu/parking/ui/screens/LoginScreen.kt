@@ -5,7 +5,6 @@ import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Email
 import androidx.compose.material.icons.filled.Person
-import androidx.compose.material.icons.filled.Phone
 import androidx.compose.material.icons.filled.Visibility
 import androidx.compose.material.icons.filled.VisibilityOff
 import androidx.compose.material3.*
@@ -21,20 +20,25 @@ import androidx.compose.ui.unit.dp
 import sibu.parking.model.UserType
 
 enum class LoginType {
-    Email, Phone, Username
+    Email, Username
 }
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
 fun LoginScreen(
-    onLoginClick: (String, String, UserType) -> Unit = { _, _, _ -> },
-    onRegisterClick: () -> Unit = {}
+    onLoginClick: (String, String) -> Unit = { _, _ -> },
+    onRegisterClick: () -> Unit = {},
+    onForgotPasswordClick: (String) -> Unit = { }
 ) {
     var loginInput by remember { mutableStateOf("") }
     var password by remember { mutableStateOf("") }
     var passwordVisible by remember { mutableStateOf(false) }
     var selectedLoginType by remember { mutableStateOf(LoginType.Email) }
-    var selectedUserType by remember { mutableStateOf(UserType.USER) }
+    
+    // For forgot password dialog
+    var showForgotPasswordDialog by remember { mutableStateOf(false) }
+    var forgotPasswordEmail by remember { mutableStateOf("") }
+    var emailError by remember { mutableStateOf<String?>(null) }
 
     Column(
         modifier = Modifier
@@ -49,40 +53,6 @@ fun LoginScreen(
             style = MaterialTheme.typography.headlineLarge,
             modifier = Modifier.padding(bottom = 32.dp)
         )
-
-        // User Type Selection
-        Row(
-            modifier = Modifier
-                .fillMaxWidth()
-                .padding(bottom = 16.dp),
-            horizontalArrangement = Arrangement.SpaceEvenly
-        ) {
-            FilterChip(
-                selected = selectedUserType == UserType.USER,
-                onClick = { selectedUserType = UserType.USER },
-                label = { Text("用户") },
-                leadingIcon = {
-                    Icon(
-                        imageVector = Icons.Default.Person,
-                        contentDescription = null,
-                        modifier = Modifier.size(18.dp)
-                    )
-                }
-            )
-            
-            FilterChip(
-                selected = selectedUserType == UserType.STAFF,
-                onClick = { selectedUserType = UserType.STAFF },
-                label = { Text("工作人员") },
-                leadingIcon = {
-                    Icon(
-                        imageVector = Icons.Default.Person,
-                        contentDescription = null,
-                        modifier = Modifier.size(18.dp)
-                    )
-                }
-            )
-        }
 
         // Login Type Selector
         Row(
@@ -100,14 +70,6 @@ fun LoginScreen(
             )
             
             LoginTypeChip(
-                type = LoginType.Phone,
-                icon = Icons.Default.Phone,
-                label = "Phone",
-                isSelected = selectedLoginType == LoginType.Phone,
-                onClick = { selectedLoginType = LoginType.Phone }
-            )
-            
-            LoginTypeChip(
                 type = LoginType.Username,
                 icon = Icons.Default.Person,
                 label = "Username",
@@ -119,19 +81,16 @@ fun LoginScreen(
         // Input Field
         val keyboardType = when (selectedLoginType) {
             LoginType.Email -> KeyboardType.Email
-            LoginType.Phone -> KeyboardType.Phone
             LoginType.Username -> KeyboardType.Text
         }
         
         val inputLabel = when (selectedLoginType) {
             LoginType.Email -> "Email"
-            LoginType.Phone -> "Phone"
             LoginType.Username -> "Username"
         }
         
         val inputIcon = when (selectedLoginType) {
             LoginType.Email -> Icons.Default.Email
-            LoginType.Phone -> Icons.Default.Phone
             LoginType.Username -> Icons.Default.Person
         }
 
@@ -161,7 +120,7 @@ fun LoginScreen(
             visualTransformation = if (passwordVisible) VisualTransformation.None else PasswordVisualTransformation(),
             modifier = Modifier
                 .fillMaxWidth()
-                .padding(bottom = 24.dp),
+                .padding(bottom = 8.dp),
             keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Password),
             trailingIcon = {
                 val image = if (passwordVisible)
@@ -175,10 +134,25 @@ fun LoginScreen(
                 }
             }
         )
+        
+        // Forgot Password link
+        Box(
+            modifier = Modifier
+                .fillMaxWidth()
+                .padding(bottom = 16.dp),
+            contentAlignment = Alignment.CenterEnd
+        ) {
+            TextButton(
+                onClick = { showForgotPasswordDialog = true },
+                contentPadding = PaddingValues(4.dp)
+            ) {
+                Text("Forgot Password?")
+            }
+        }
 
         // Login Button
         Button(
-            onClick = { onLoginClick(loginInput, password, selectedUserType) },
+            onClick = { onLoginClick(loginInput, password) },
             modifier = Modifier
                 .fillMaxWidth()
                 .height(50.dp)
@@ -194,6 +168,69 @@ fun LoginScreen(
         ) {
             Text("没有账号？立即注册")
         }
+        
+        Spacer(modifier = Modifier.height(16.dp))
+        
+        // Register Button
+        TextButton(
+            onClick = onRegisterClick
+        ) {
+            Text("Don't have an account? Register")
+        }
+    }
+    
+    // Forgot Password Dialog
+    if (showForgotPasswordDialog) {
+        AlertDialog(
+            onDismissRequest = { 
+                showForgotPasswordDialog = false
+                forgotPasswordEmail = ""
+                emailError = null 
+            },
+            title = { Text("Reset Password") },
+            text = {
+                Column {
+                    Text("Enter your email address to receive a password reset link")
+                    Spacer(modifier = Modifier.height(16.dp))
+                    OutlinedTextField(
+                        value = forgotPasswordEmail,
+                        onValueChange = { forgotPasswordEmail = it; emailError = null },
+                        label = { Text("Email") },
+                        singleLine = true,
+                        isError = emailError != null,
+                        supportingText = { emailError?.let { Text(it) } },
+                        keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Email),
+                        modifier = Modifier.fillMaxWidth()
+                    )
+                }
+            },
+            confirmButton = {
+                Button(
+                    onClick = {
+                        if (!android.util.Patterns.EMAIL_ADDRESS.matcher(forgotPasswordEmail).matches()) {
+                            emailError = "Please enter a valid email"
+                        } else {
+                            onForgotPasswordClick(forgotPasswordEmail)
+                            showForgotPasswordDialog = false
+                            forgotPasswordEmail = ""
+                        }
+                    }
+                ) {
+                    Text("Send")
+                }
+            },
+            dismissButton = {
+                TextButton(
+                    onClick = { 
+                        showForgotPasswordDialog = false
+                        forgotPasswordEmail = ""
+                        emailError = null
+                    }
+                ) {
+                    Text("Cancel")
+                }
+            }
+        )
     }
 }
 
