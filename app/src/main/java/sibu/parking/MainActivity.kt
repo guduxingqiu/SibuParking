@@ -31,7 +31,7 @@ import sibu.parking.ui.screens.RegisterScreen
 import sibu.parking.ui.screens.StaffHomeScreen
 import sibu.parking.ui.screens.UseCouponScreen
 import sibu.parking.ui.screens.UserHomeScreen
-import sibu.parking.ui.screens.VerificationType
+//import sibu.parking.ui.screens.VerificationType
 import sibu.parking.ui.theme.SibuParkingTheme
 
 enum class AppScreen {
