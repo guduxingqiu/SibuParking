@@ -19,22 +19,18 @@ import sibu.parking.firebase.FirebaseAuthService
 import sibu.parking.firebase.FirebaseCouponService
 import sibu.parking.model.Cart
 import sibu.parking.model.CouponType
+import sibu.parking.model.CouponUsage
 import sibu.parking.model.ParkingArea
 import sibu.parking.model.ParkingCoupon
 import sibu.parking.model.PaymentMethod
 import sibu.parking.model.User
 import sibu.parking.model.UserType
 import sibu.parking.model.Vehicle
-import sibu.parking.ui.screens.BuyCouponScreen
-import sibu.parking.ui.screens.LoginScreen
-import sibu.parking.ui.screens.RegisterScreen
-import sibu.parking.ui.screens.StaffHomeScreen
-import sibu.parking.ui.screens.UseCouponScreen
-import sibu.parking.ui.screens.UserHomeScreen
+import sibu.parking.ui.screens.*
 import sibu.parking.ui.theme.SibuParkingTheme
 
 enum class AppScreen {
-    LOGIN, REGISTER, USER_HOME, STAFF_HOME, USE_COUPON, BUY_COUPON, EMAIL_VERIFICATION
+    LOGIN, REGISTER, USER_HOME, STAFF_HOME, USE_COUPON, BUY_COUPON, CHECK_COUPON, EMAIL_VERIFICATION
 }
 
 class MainActivity : ComponentActivity() {
@@ -61,6 +57,11 @@ class MainActivity : ComponentActivity() {
                     var favoriteVehicles by remember { mutableStateOf<List<Vehicle>>(emptyList()) }
                     var favoriteParkingAreas by remember { mutableStateOf<List<ParkingArea>>(emptyList()) }
                     var isLoadingCoupons by remember { mutableStateOf(false) }
+                    
+                    // Staff check coupon state
+                    var checkCouponResults by remember { mutableStateOf<List<ParkingCoupon>>(emptyList()) }
+                    var checkUsageResults by remember { mutableStateOf<List<CouponUsage>>(emptyList()) }
+                    var isCheckingCoupon by remember { mutableStateOf(false) }
                     
                     // Shopping cart state
                     val cart = remember { Cart() }
@@ -230,6 +231,22 @@ class MainActivity : ComponentActivity() {
                                 }
                             )
                         }
+                        currentScreen == AppScreen.CHECK_COUPON -> {
+                            CheckCouponScreen(
+                                couponResults = checkCouponResults,
+                                usageResults = checkUsageResults,
+                                isLoading = isCheckingCoupon,
+                                onSearchByVehicle = { vehicleNumber ->
+                                    checkCouponByVehicle(vehicleNumber)
+                                },
+                                onSearchByLocation = { area, lot ->
+                                    checkCouponByLocation(area, lot)
+                                },
+                                onBackClick = {
+                                    currentScreen = AppScreen.STAFF_HOME
+                                }
+                            )
+                        }
                         currentUser?.userType == UserType.STAFF -> {
                             StaffHomeScreen(
                                 username = currentUser?.username ?: currentUser?.email ?: "",
@@ -237,6 +254,12 @@ class MainActivity : ComponentActivity() {
                                     authService.logout()
                                     currentUser = null
                                     currentScreen = AppScreen.LOGIN
+                                },
+                                onCheckCouponClick = {
+                                    // Reset results before navigating to check screen
+                                    checkCouponResults = emptyList()
+                                    checkUsageResults = emptyList()
+                                    currentScreen = AppScreen.CHECK_COUPON
                                 }
                             )
                         }
@@ -424,5 +447,73 @@ class MainActivity : ComponentActivity() {
         
         val intent = Intent(Intent.ACTION_VIEW, Uri.parse(url))
         startActivity(intent)
+    }
+    
+    // Check coupon by vehicle number
+    private fun checkCouponByVehicle(vehicleNumber: String) {
+        isCheckingCoupon = true
+        lifecycleScope.launch {
+            try {
+                val result = couponService.checkCouponByVehicle(vehicleNumber)
+                
+                if (result.isSuccess) {
+                    val (coupons, usages) = result.getOrDefault(Pair(emptyList(), emptyList()))
+                    checkCouponResults = coupons
+                    checkUsageResults = usages
+                } else {
+                    Toast.makeText(
+                        this@MainActivity,
+                        "Failed to check coupon: ${result.exceptionOrNull()?.message}",
+                        Toast.LENGTH_SHORT
+                    ).show()
+                    checkCouponResults = emptyList()
+                    checkUsageResults = emptyList()
+                }
+            } catch (e: Exception) {
+                Toast.makeText(
+                    this@MainActivity,
+                    "Failed to check coupon: ${e.message}",
+                    Toast.LENGTH_SHORT
+                ).show()
+                checkCouponResults = emptyList()
+                checkUsageResults = emptyList()
+            } finally {
+                isCheckingCoupon = false
+            }
+        }
+    }
+    
+    // Check coupon by location
+    private fun checkCouponByLocation(parkingArea: String, lotNumber: String) {
+        isCheckingCoupon = true
+        lifecycleScope.launch {
+            try {
+                val result = couponService.checkCouponByLocation(parkingArea, lotNumber)
+                
+                if (result.isSuccess) {
+                    val (coupons, usages) = result.getOrDefault(Pair(emptyList(), emptyList()))
+                    checkCouponResults = coupons
+                    checkUsageResults = usages
+                } else {
+                    Toast.makeText(
+                        this@MainActivity,
+                        "Failed to check coupon: ${result.exceptionOrNull()?.message}",
+                        Toast.LENGTH_SHORT
+                    ).show()
+                    checkCouponResults = emptyList()
+                    checkUsageResults = emptyList()
+                }
+            } catch (e: Exception) {
+                Toast.makeText(
+                    this@MainActivity,
+                    "Failed to check coupon: ${e.message}",
+                    Toast.LENGTH_SHORT
+                ).show()
+                checkCouponResults = emptyList()
+                checkUsageResults = emptyList()
+            } finally {
+                isCheckingCoupon = false
+            }
+        }
     }
 } 

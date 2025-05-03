@@ -133,7 +133,8 @@ class FirebaseCouponService {
                 usedCount = usedCount,
                 parkingArea = parkingArea,
                 parkingLotNumber = parkingLotNumber,
-                vehicleNumber = vehicleNumber
+                vehicleNumber = vehicleNumber,
+                timestamp = System.currentTimeMillis()
             )
             
             firestore.collection("couponUsages").document(usage.id)
@@ -141,6 +142,65 @@ class FirebaseCouponService {
                 .await()
                 
             Result.success(true)
+        } catch (e: Exception) {
+            Result.failure(e)
+        }
+    }
+    
+    // Check coupon by vehicle number (for staff)
+    suspend fun checkCouponByVehicle(vehicleNumber: String): Result<Pair<List<ParkingCoupon>, List<CouponUsage>>> {
+        return try {
+            // Get usage history for this vehicle
+            val usageSnapshot = firestore.collection("couponUsages")
+                .whereEqualTo("vehicleNumber", vehicleNumber)
+                .get()
+                .await()
+                
+            val usages = usageSnapshot.documents.mapNotNull { doc ->
+                doc.toObject(CouponUsage::class.java)
+            }.sortedByDescending { it.timestamp }
+            
+            // Get all coupon IDs associated with this vehicle
+            val couponIds = usages.map { it.couponId }.distinct()
+            
+            // Get coupons that match those IDs
+            val coupons = mutableListOf<ParkingCoupon>()
+            for (couponId in couponIds) {
+                val couponDoc = firestore.collection("coupons").document(couponId).get().await()
+                couponDoc.toObject(ParkingCoupon::class.java)?.let { coupons.add(it) }
+            }
+            
+            Result.success(Pair(coupons, usages))
+        } catch (e: Exception) {
+            Result.failure(e)
+        }
+    }
+    
+    // Check coupon by parking area and lot (for staff)
+    suspend fun checkCouponByLocation(parkingArea: String, lotNumber: String): Result<Pair<List<ParkingCoupon>, List<CouponUsage>>> {
+        return try {
+            // Get usage history for this location
+            val usageSnapshot = firestore.collection("couponUsages")
+                .whereEqualTo("parkingArea", parkingArea)
+                .whereEqualTo("parkingLotNumber", lotNumber)
+                .get()
+                .await()
+                
+            val usages = usageSnapshot.documents.mapNotNull { doc ->
+                doc.toObject(CouponUsage::class.java)
+            }.sortedByDescending { it.timestamp }
+            
+            // Get all coupon IDs associated with this location
+            val couponIds = usages.map { it.couponId }.distinct()
+            
+            // Get coupons that match those IDs
+            val coupons = mutableListOf<ParkingCoupon>()
+            for (couponId in couponIds) {
+                val couponDoc = firestore.collection("coupons").document(couponId).get().await()
+                couponDoc.toObject(ParkingCoupon::class.java)?.let { coupons.add(it) }
+            }
+            
+            Result.success(Pair(coupons, usages))
         } catch (e: Exception) {
             Result.failure(e)
         }
