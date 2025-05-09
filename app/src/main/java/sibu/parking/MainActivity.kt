@@ -38,6 +38,10 @@ class MainActivity : ComponentActivity() {
     private val authService = FirebaseAuthService()
     private val couponService = FirebaseCouponService()
     
+    private var _checkCouponResults = mutableListOf<ParkingCoupon>()
+    private var _checkUsageResults = mutableListOf<CouponUsage>()
+    private var _isCheckingCoupon = false
+    
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
         enableEdgeToEdge()
@@ -57,11 +61,6 @@ class MainActivity : ComponentActivity() {
                     var favoriteVehicles by remember { mutableStateOf<List<Vehicle>>(emptyList()) }
                     var favoriteParkingAreas by remember { mutableStateOf<List<ParkingArea>>(emptyList()) }
                     var isLoadingCoupons by remember { mutableStateOf(false) }
-                    
-                    // Staff check coupon state
-                    var checkCouponResults by remember { mutableStateOf<List<ParkingCoupon>>(emptyList()) }
-                    var checkUsageResults by remember { mutableStateOf<List<CouponUsage>>(emptyList()) }
-                    var isCheckingCoupon by remember { mutableStateOf(false) }
                     
                     // Shopping cart state
                     val cart = remember { Cart() }
@@ -106,6 +105,18 @@ class MainActivity : ComponentActivity() {
                                 // Silent fail
                             }
                         }
+                    }
+                    
+                    // 使用状态对象来保存和观察变量的变化
+                    var checkCouponResults by remember { mutableStateOf(_checkCouponResults.toList()) }
+                    var checkUsageResults by remember { mutableStateOf(_checkUsageResults.toList()) }
+                    var isCheckingCoupon by remember { mutableStateOf(_isCheckingCoupon) }
+                    
+                    // 添加状态更新函数
+                    fun updateCheckCouponState() {
+                        checkCouponResults = _checkCouponResults.toList()
+                        checkUsageResults = _checkUsageResults.toList()
+                        isCheckingCoupon = _isCheckingCoupon
                     }
                     
                     when {
@@ -232,15 +243,22 @@ class MainActivity : ComponentActivity() {
                             )
                         }
                         currentScreen == AppScreen.CHECK_COUPON -> {
+                            // 确保显示最新状态
+                            updateCheckCouponState()
+                            
                             CheckCouponScreen(
                                 couponResults = checkCouponResults,
                                 usageResults = checkUsageResults,
                                 isLoading = isCheckingCoupon,
                                 onSearchByVehicle = { vehicleNumber ->
-                                    checkCouponByVehicle(vehicleNumber)
+                                    checkCouponByVehicle(vehicleNumber) {
+                                        updateCheckCouponState()
+                                    }
                                 },
                                 onSearchByLocation = { area, lot ->
-                                    checkCouponByLocation(area, lot)
+                                    checkCouponByLocation(area, lot) {
+                                        updateCheckCouponState()
+                                    }
                                 },
                                 onBackClick = {
                                     currentScreen = AppScreen.STAFF_HOME
@@ -257,8 +275,8 @@ class MainActivity : ComponentActivity() {
                                 },
                                 onCheckCouponClick = {
                                     // Reset results before navigating to check screen
-                                    checkCouponResults = emptyList()
-                                    checkUsageResults = emptyList()
+                                    _checkCouponResults = mutableListOf()
+                                    _checkUsageResults = mutableListOf()
                                     currentScreen = AppScreen.CHECK_COUPON
                                 }
                             )
@@ -450,24 +468,24 @@ class MainActivity : ComponentActivity() {
     }
     
     // Check coupon by vehicle number
-    private fun checkCouponByVehicle(vehicleNumber: String) {
-        isCheckingCoupon = true
+    private fun checkCouponByVehicle(vehicleNumber: String, onComplete: () -> Unit = {}) {
+        _isCheckingCoupon = true
         lifecycleScope.launch {
             try {
                 val result = couponService.checkCouponByVehicle(vehicleNumber)
                 
                 if (result.isSuccess) {
                     val (coupons, usages) = result.getOrDefault(Pair(emptyList(), emptyList()))
-                    checkCouponResults = coupons
-                    checkUsageResults = usages
+                    _checkCouponResults = coupons.toMutableList()
+                    _checkUsageResults = usages.toMutableList()
                 } else {
                     Toast.makeText(
                         this@MainActivity,
                         "Failed to check coupon: ${result.exceptionOrNull()?.message}",
                         Toast.LENGTH_SHORT
                     ).show()
-                    checkCouponResults = emptyList()
-                    checkUsageResults = emptyList()
+                    _checkCouponResults = mutableListOf()
+                    _checkUsageResults = mutableListOf()
                 }
             } catch (e: Exception) {
                 Toast.makeText(
@@ -475,33 +493,34 @@ class MainActivity : ComponentActivity() {
                     "Failed to check coupon: ${e.message}",
                     Toast.LENGTH_SHORT
                 ).show()
-                checkCouponResults = emptyList()
-                checkUsageResults = emptyList()
+                _checkCouponResults = mutableListOf()
+                _checkUsageResults = mutableListOf()
             } finally {
-                isCheckingCoupon = false
+                _isCheckingCoupon = false
+                onComplete()
             }
         }
     }
     
     // Check coupon by location
-    private fun checkCouponByLocation(parkingArea: String, lotNumber: String) {
-        isCheckingCoupon = true
+    private fun checkCouponByLocation(parkingArea: String, lotNumber: String, onComplete: () -> Unit = {}) {
+        _isCheckingCoupon = true
         lifecycleScope.launch {
             try {
                 val result = couponService.checkCouponByLocation(parkingArea, lotNumber)
                 
                 if (result.isSuccess) {
                     val (coupons, usages) = result.getOrDefault(Pair(emptyList(), emptyList()))
-                    checkCouponResults = coupons
-                    checkUsageResults = usages
+                    _checkCouponResults = coupons.toMutableList()
+                    _checkUsageResults = usages.toMutableList()
                 } else {
                     Toast.makeText(
                         this@MainActivity,
                         "Failed to check coupon: ${result.exceptionOrNull()?.message}",
                         Toast.LENGTH_SHORT
                     ).show()
-                    checkCouponResults = emptyList()
-                    checkUsageResults = emptyList()
+                    _checkCouponResults = mutableListOf()
+                    _checkUsageResults = mutableListOf()
                 }
             } catch (e: Exception) {
                 Toast.makeText(
@@ -509,10 +528,11 @@ class MainActivity : ComponentActivity() {
                     "Failed to check coupon: ${e.message}",
                     Toast.LENGTH_SHORT
                 ).show()
-                checkCouponResults = emptyList()
-                checkUsageResults = emptyList()
+                _checkCouponResults = mutableListOf()
+                _checkUsageResults = mutableListOf()
             } finally {
-                isCheckingCoupon = false
+                _isCheckingCoupon = false
+                onComplete()
             }
         }
     }

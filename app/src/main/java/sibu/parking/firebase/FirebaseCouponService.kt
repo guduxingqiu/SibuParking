@@ -5,6 +5,7 @@ import com.google.firebase.firestore.FirebaseFirestore
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.flow
 import kotlinx.coroutines.tasks.await
+import sibu.parking.model.User
 import sibu.parking.model.Cart
 import sibu.parking.model.CartItem
 import sibu.parking.model.CouponType
