@@ -16,6 +16,7 @@ import sibu.parking.model.CartItem
 import sibu.parking.model.CouponType
 import sibu.parking.model.PaymentMethod
 import androidx.compose.foundation.clickable
+import sibu.parking.PaymentProvider
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
@@ -84,7 +85,10 @@ fun BuyCouponScreen(
     onRemoveFromCart: (Int) -> Unit,
     onUpdateQuantity: (Int, Int) -> Unit,
     onCheckout: (PaymentMethod) -> Unit,
-    onBackClick: () -> Unit
+    onBackClick: () -> Unit,
+    onChangePaymentProvider: (PaymentProvider) -> Unit = {},
+    selectedPaymentProvider: PaymentProvider = PaymentProvider.MANUAL,
+    isProcessingPayment: Boolean = false
 ) {
     var showCartSheet by remember { mutableStateOf(false) }
     var selectedPaymentMethod by remember { mutableStateOf<PaymentMethod?>(null) }
@@ -169,7 +173,10 @@ fun BuyCouponScreen(
             onCheckout = { paymentMethod -> 
                 onCheckout(paymentMethod)
                 showCartSheet = false
-            }
+            },
+            onChangePaymentProvider = onChangePaymentProvider,
+            selectedPaymentProvider = selectedPaymentProvider,
+            isProcessingPayment = isProcessingPayment
         )
     }
 }
@@ -181,7 +188,10 @@ fun ShoppingCartBottomSheet(
     onDismiss: () -> Unit,
     onRemoveItem: (Int) -> Unit,
     onUpdateQuantity: (Int, Int) -> Unit,
-    onCheckout: (PaymentMethod) -> Unit
+    onCheckout: (PaymentMethod) -> Unit,
+    onChangePaymentProvider: (PaymentProvider) -> Unit,
+    selectedPaymentProvider: PaymentProvider,
+    isProcessingPayment: Boolean = false
 ) {
     var selectedPaymentMethod by remember { mutableStateOf<PaymentMethod?>(null) }
     
@@ -270,6 +280,36 @@ fun ShoppingCartBottomSheet(
                     )
                 }
                 
+                // Payment Provider Selection
+                Column(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .padding(vertical = 8.dp)
+                ) {
+                    Text(
+                        text = "Select Payment Provider",
+                        style = MaterialTheme.typography.titleMedium,
+                        modifier = Modifier.padding(bottom = 8.dp)
+                    )
+                    
+                    Row(
+                        modifier = Modifier.fillMaxWidth(),
+                        horizontalArrangement = Arrangement.spacedBy(8.dp)
+                    ) {
+                        PaymentProviderButton(
+                            title = "Standard Payment",
+                            selected = selectedPaymentProvider == PaymentProvider.MANUAL,
+                            onClick = { onChangePaymentProvider(PaymentProvider.MANUAL) }
+                        )
+                        
+                        PaymentProviderButton(
+                            title = "Stripe Payment",
+                            selected = selectedPaymentProvider == PaymentProvider.STRIPE,
+                            onClick = { onChangePaymentProvider(PaymentProvider.STRIPE) }
+                        )
+                    }
+                }
+                
                 // Payment method selection
                 Column(
                     modifier = Modifier
@@ -309,15 +349,24 @@ fun ShoppingCartBottomSheet(
                         .fillMaxWidth()
                         .height(50.dp)
                         .padding(vertical = 8.dp),
-                    enabled = selectedPaymentMethod != null
+                    enabled = selectedPaymentMethod != null && !isProcessingPayment
                 ) {
-                    Icon(
-                        imageVector = Icons.Default.Payment,
-                        contentDescription = null,
-                        modifier = Modifier.size(ButtonDefaults.IconSize)
-                    )
-                    Spacer(Modifier.size(ButtonDefaults.IconSpacing))
-                    Text("Proceed to Payment")
+                    if (isProcessingPayment) {
+                        CircularProgressIndicator(
+                            modifier = Modifier.size(ButtonDefaults.IconSize),
+                            color = MaterialTheme.colorScheme.onPrimary,
+                            strokeWidth = 2.dp
+                        )
+                        Spacer(Modifier.size(ButtonDefaults.IconSpacing))
+                    } else {
+                        Icon(
+                            imageVector = Icons.Default.Payment,
+                            contentDescription = null,
+                            modifier = Modifier.size(ButtonDefaults.IconSize)
+                        )
+                        Spacer(Modifier.size(ButtonDefaults.IconSpacing))
+                    }
+                    Text(if (isProcessingPayment) "Processing..." else "Proceed to Payment")
                 }
             }
         }
@@ -383,8 +432,7 @@ fun CartItemRow(
 fun PaymentMethodButton(
     title: String,
     selected: Boolean,
-    onClick: () -> Unit,
-    modifier: Modifier = Modifier
+    onClick: () -> Unit
 ) {
     val backgroundColor = if (selected) {
         MaterialTheme.colorScheme.primaryContainer
@@ -399,8 +447,47 @@ fun PaymentMethodButton(
     }
     
     Surface(
-        modifier = Modifier
-            .clickable(onClick = onClick),
+        modifier = Modifier,
+        color = backgroundColor,
+        shape = MaterialTheme.shapes.medium,
+        onClick = onClick
+    ) {
+        Box(
+            modifier = Modifier
+                .fillMaxWidth()
+                .padding(8.dp),
+            contentAlignment = Alignment.Center
+        ) {
+            Text(
+                text = title,
+                color = textColor,
+                style = MaterialTheme.typography.bodyMedium
+            )
+        }
+    }
+}
+
+@Composable
+fun PaymentProviderButton(
+    title: String,
+    selected: Boolean,
+    onClick: () -> Unit,
+    modifier: Modifier = Modifier
+) {
+    val backgroundColor = if (selected) {
+        MaterialTheme.colorScheme.tertiaryContainer
+    } else {
+        MaterialTheme.colorScheme.surfaceVariant
+    }
+    
+    val textColor = if (selected) {
+        MaterialTheme.colorScheme.onTertiaryContainer
+    } else {
+        MaterialTheme.colorScheme.onSurfaceVariant
+    }
+    
+    Surface(
+        modifier = Modifier,
         color = backgroundColor,
         shape = MaterialTheme.shapes.medium,
         onClick = onClick

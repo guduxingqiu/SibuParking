@@ -27,6 +27,14 @@ fun UseCouponScreen(
     onBackClick: () -> Unit,
     isLoading: Boolean = false
 ) {
+    // 添加调试日志
+    LaunchedEffect(coupons) {
+        android.util.Log.d("UseCouponScreen", "优惠券列表更新: ${coupons.size}张券")
+        coupons.forEachIndexed { index, coupon ->
+            android.util.Log.d("UseCouponScreen", "券[$index]: ${coupon.id}, 类型: ${coupon.type}, 剩余: ${coupon.remainingUses}")
+        }
+    }
+    
     var selectedCoupon by remember { mutableStateOf<ParkingCoupon?>(null) }
     
     // Dialog state
@@ -111,7 +119,10 @@ fun UseCouponScreen(
             TopAppBar(
                 title = { Text("Use Parking Coupon") },
                 navigationIcon = {
-                    IconButton(onClick = onBackClick) {
+                    IconButton(onClick = {
+                        android.util.Log.d("UseCouponScreen", "返回按钮点击")
+                        onBackClick()
+                    }) {
                         Icon(Icons.Default.ArrowBack, contentDescription = "Back")
                     }
                 }
@@ -127,6 +138,7 @@ fun UseCouponScreen(
                 CircularProgressIndicator(
                     modifier = Modifier.align(Alignment.Center)
                 )
+                android.util.Log.d("UseCouponScreen", "显示加载中...")
             } else if (coupons.isEmpty()) {
                 Column(
                     modifier = Modifier
@@ -148,6 +160,7 @@ fun UseCouponScreen(
                         style = MaterialTheme.typography.bodyLarge
                     )
                 }
+                android.util.Log.d("UseCouponScreen", "显示无券状态")
             } else {
                 LazyColumn(
                     modifier = Modifier
@@ -166,6 +179,7 @@ fun UseCouponScreen(
                         CouponCard(
                             coupon = coupon,
                             onClick = {
+                                android.util.Log.d("UseCouponScreen", "点击优惠券: ${coupon.id}, 类型: ${coupon.type}")
                                 selectedCoupon = coupon
                                 showDialog = true
                                 resetDialogFields()
@@ -173,6 +187,7 @@ fun UseCouponScreen(
                         )
                     }
                 }
+                android.util.Log.d("UseCouponScreen", "显示券列表")
             }
         }
     }
@@ -189,6 +204,28 @@ fun UseCouponScreen(
                 Column(
                     modifier = Modifier.fillMaxWidth()
                 ) {
+                    // Display coupon info
+                    Card(
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .padding(bottom = 16.dp)
+                    ) {
+                        Column(
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .padding(8.dp)
+                        ) {
+                            Text(
+                                text = "Coupon ID: ${selectedCoupon!!.id.take(8)}...",
+                                style = MaterialTheme.typography.bodySmall
+                            )
+                            Text(
+                                text = "Remaining Uses: ${selectedCoupon!!.remainingUses}",
+                                style = MaterialTheme.typography.bodyMedium
+                            )
+                        }
+                    }
+                    
                     // Used Count
                     OutlinedTextField(
                         value = usedCount,
@@ -313,6 +350,7 @@ fun UseCouponScreen(
                 Button(
                     onClick = {
                         if (validateForm()) {
+                            android.util.Log.d("UseCouponScreen", "使用优惠券: ${selectedCoupon!!.id}, 使用次数: $usedCount")
                             onUseCoupon(
                                 selectedCoupon!!.id,
                                 usedCount.toInt(),

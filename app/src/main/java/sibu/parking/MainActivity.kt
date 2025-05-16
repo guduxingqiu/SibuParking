@@ -13,10 +13,12 @@ import androidx.compose.material3.Surface
 import androidx.compose.runtime.*
 import androidx.compose.ui.Modifier
 import androidx.lifecycle.lifecycleScope
+import com.stripe.android.paymentsheet.PaymentSheet
 import kotlinx.coroutines.flow.collectLatest
 import kotlinx.coroutines.launch
 import sibu.parking.firebase.FirebaseAuthService
 import sibu.parking.firebase.FirebaseCouponService
+import sibu.parking.firebase.StripeService
 import sibu.parking.model.Cart
 import sibu.parking.model.CouponType
 import sibu.parking.model.CouponUsage
@@ -30,21 +32,39 @@ import sibu.parking.ui.screens.*
 import sibu.parking.ui.theme.SibuParkingTheme
 
 enum class AppScreen {
-    LOGIN, REGISTER, USER_HOME, STAFF_HOME, USE_COUPON, BUY_COUPON, CHECK_COUPON, EMAIL_VERIFICATION
+    LOGIN, REGISTER, USER_HOME, STAFF_HOME, USE_COUPON, BUY_COUPON, CHECK_COUPON, EMAIL_VERIFICATION, STRIPE_PAYMENT
+}
+
+enum class PaymentProvider {
+    MANUAL, STRIPE
 }
 
 class MainActivity : ComponentActivity() {
     
     private val authService = FirebaseAuthService()
     private val couponService = FirebaseCouponService()
+    private lateinit var stripeService: StripeService
     
     private var _checkCouponResults = mutableListOf<ParkingCoupon>()
     private var _checkUsageResults = mutableListOf<CouponUsage>()
     private var _isCheckingCoupon = false
     
+    // Cart reference for payment processing
+    private lateinit var _currentCart: Cart
+    private var _selectedPaymentMethod: PaymentMethod? = null
+    private var _isPaymentProcessing = false
+    private var userCoupons by mutableStateOf<List<ParkingCoupon>>(emptyList())
+    private var isLoadingCoupons by mutableStateOf(false)
+    
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
         enableEdgeToEdge()
+        
+        // Initialize Stripe Service
+        stripeService = StripeService(this)
+        
+        // Test Stripe connection
+        testStripeConnection()
         
         setContent {
             SibuParkingTheme {
@@ -57,28 +77,26 @@ class MainActivity : ComponentActivity() {
                     var currentScreen by remember { mutableStateOf(AppScreen.LOGIN) }
                     
                     // State for coupons
-                    var userCoupons by remember { mutableStateOf<List<ParkingCoupon>>(emptyList()) }
+                    var userCoupons by remember { mutableStateOf(this@MainActivity.userCoupons) }
                     var favoriteVehicles by remember { mutableStateOf<List<Vehicle>>(emptyList()) }
                     var favoriteParkingAreas by remember { mutableStateOf<List<ParkingArea>>(emptyList()) }
-                    var isLoadingCoupons by remember { mutableStateOf(false) }
+                    var isLoadingCoupons by remember { mutableStateOf(this@MainActivity.isLoadingCoupons) }
                     
                     // Shopping cart state
                     val cart = remember { Cart() }
+                    _currentCart = cart
                     
-                    // Load coupons when needed
-                    fun loadCoupons() {
-                        isLoadingCoupons = true
-                        lifecycleScope.launch {
-                            try {
-                                couponService.getUserCoupons().collectLatest { coupons ->
-                                    userCoupons = coupons
-                                    isLoadingCoupons = false
-                                }
-                            } catch (e: Exception) {
-                                Toast.makeText(this@MainActivity, "Failed to load coupons: ${e.message}", Toast.LENGTH_SHORT).show()
-                                isLoadingCoupons = false
-                            }
-                        }
+                    // Payment state
+                    var isPaymentProcessing by remember { mutableStateOf(_isPaymentProcessing) }
+                    var selectedPaymentProvider by remember { mutableStateOf(PaymentProvider.MANUAL) }
+                    
+                    // 使用LaunchedEffect来观察外部状态变化
+                    LaunchedEffect(this@MainActivity.userCoupons) {
+                        userCoupons = this@MainActivity.userCoupons
+                    }
+                    
+                    LaunchedEffect(this@MainActivity.isLoadingCoupons) {
+                        isLoadingCoupons = this@MainActivity.isLoadingCoupons
                     }
                     
                     // Load favorite vehicles
@@ -117,6 +135,10 @@ class MainActivity : ComponentActivity() {
                         checkCouponResults = _checkCouponResults.toList()
                         checkUsageResults = _checkUsageResults.toList()
                         isCheckingCoupon = _isCheckingCoupon
+                    }
+                    
+                    fun updatePaymentState() {
+                        isPaymentProcessing = _isPaymentProcessing
                     }
                     
                     when {
@@ -185,6 +207,7 @@ class MainActivity : ComponentActivity() {
                                 isLoading = isLoadingCoupons,
                                 onBackClick = {
                                     currentScreen = AppScreen.USER_HOME
+                                    loadCoupons()
                                 },
                                 onUseCoupon = { couponId, usedCount, parkingArea, parkingLotNumber, vehicleNumber ->
                                     isLoading = true
@@ -216,30 +239,63 @@ class MainActivity : ComponentActivity() {
                                         return@BuyCouponScreen
                                     }
                                     
-                                    isLoading = true
+                                    // Save payment method for later use
+                                    _selectedPaymentMethod = paymentMethod
                                     
-                                    // Process payment and purchase coupons
-                                    purchaseCoupons(cart, paymentMethod) { success ->
-                                        isLoading = false
-                                        if (success) {
-                                            // Clear cart after successful purchase
-                                            cart.clear()
-                                            loadCoupons() // Reload coupons to reflect new purchases
-                                            currentScreen = AppScreen.USER_HOME
+                                    // Choose between payment providers
+                                    when (selectedPaymentProvider) {
+                                        PaymentProvider.MANUAL -> {
+                                            isLoading = true
+                                            // Process traditional payment
+                                            purchaseCoupons(cart, paymentMethod) { success ->
+                                                isLoading = false
+                                                if (success) {
+                                                    // Clear cart after successful purchase
+                                                    cart.clear()
+                                                    loadCoupons() // Reload coupons to reflect new purchases
+                                                    currentScreen = AppScreen.USER_HOME
+                                                    
+                                                    // In a real app, you would redirect to payment gateway
+                                                    // For now, we'll just show a success message
+                                                    Toast.makeText(
+                                                        this@MainActivity,
+                                                        "Purchase successful! Coupons added to your account.",
+                                                        Toast.LENGTH_LONG
+                                                    ).show()
+                                                }
+                                            }
+                                        }
+                                        PaymentProvider.STRIPE -> {
+                                            // Use Stripe for payment
+                                            _isPaymentProcessing = true
+                                            updatePaymentState()
                                             
-                                            // In a real app, you would redirect to payment gateway
-                                            // For now, we'll just show a success message
-                                            Toast.makeText(
-                                                this@MainActivity,
-                                                "Purchase successful! Coupons added to your account.",
-                                                Toast.LENGTH_LONG
-                                            ).show()
+                                            // Initialize Stripe payment
+                                            initializeStripePayment(cart) { success ->
+                                                if (success) {
+                                                    // Show Stripe payment sheet
+                                                    stripeService.presentPaymentSheet()
+                                                } else {
+                                                    _isPaymentProcessing = false
+                                                    updatePaymentState()
+                                                    Toast.makeText(
+                                                        this@MainActivity,
+                                                        "Failed to initialize payment. Please try again.",
+                                                        Toast.LENGTH_SHORT
+                                                    ).show()
+                                                }
+                                            }
                                         }
                                     }
                                 },
                                 onBackClick = {
                                     currentScreen = AppScreen.USER_HOME
-                                }
+                                },
+                                onChangePaymentProvider = { provider ->
+                                    selectedPaymentProvider = provider
+                                },
+                                selectedPaymentProvider = selectedPaymentProvider,
+                                isProcessingPayment = isPaymentProcessing
                             )
                         }
                         currentScreen == AppScreen.CHECK_COUPON -> {
@@ -252,11 +308,6 @@ class MainActivity : ComponentActivity() {
                                 isLoading = isCheckingCoupon,
                                 onSearchByVehicle = { vehicleNumber ->
                                     checkCouponByVehicle(vehicleNumber) {
-                                        updateCheckCouponState()
-                                    }
-                                },
-                                onSearchByLocation = { area, lot ->
-                                    checkCouponByLocation(area, lot) {
                                         updateCheckCouponState()
                                     }
                                 },
@@ -300,6 +351,40 @@ class MainActivity : ComponentActivity() {
                         }
                     }
                 }
+            }
+        }
+        
+        // 设置Stripe支付结果处理
+        setupStripeResultHandling()
+    }
+    
+    private fun loadCoupons() {
+        isLoadingCoupons = true
+        android.util.Log.d("MainActivity", "开始加载优惠券...")
+        
+        lifecycleScope.launch {
+            try {
+                couponService.getUserCoupons().collectLatest { coupons ->
+                    userCoupons = coupons
+                    isLoadingCoupons = false
+                    android.util.Log.d("MainActivity", "成功加载 ${coupons.size} 张优惠券")
+                    
+                    // 显示加载到的优惠券详情
+                    if (coupons.isEmpty()) {
+                        android.util.Log.d("MainActivity", "没有可用的优惠券")
+                        Toast.makeText(this@MainActivity, "您没有可用的优惠券", Toast.LENGTH_SHORT).show()
+                    } else {
+                        android.util.Log.d("MainActivity", "优惠券列表:")
+                        coupons.forEachIndexed { index, coupon ->
+                            android.util.Log.d("MainActivity", "[$index] ID: ${coupon.id}, 类型: ${coupon.type}, 剩余次数: ${coupon.remainingUses}")
+                        }
+                    }
+                }
+            } catch (e: Exception) {
+                android.util.Log.e("MainActivity", "加载优惠券失败: ${e.message}")
+                e.printStackTrace()
+                isLoadingCoupons = false
+                Toast.makeText(this@MainActivity, "加载优惠券失败: ${e.message}", Toast.LENGTH_SHORT).show()
             }
         }
     }
@@ -455,12 +540,43 @@ class MainActivity : ComponentActivity() {
         }
     }
     
+    private fun initializeStripePayment(cart: Cart, onComplete: (Boolean) -> Unit) {
+        lifecycleScope.launch {
+            try {
+                // Initialize Stripe payment sheet
+                stripeService.initializePaymentSheet(cart)
+                
+                // Create payment intent
+                val result = stripeService.createPaymentIntent(cart)
+                
+                if (result.isSuccess) {
+                    onComplete(true)
+                } else {
+                    Toast.makeText(
+                        this@MainActivity,
+                        "Failed to create payment: ${result.exceptionOrNull()?.message}",
+                        Toast.LENGTH_SHORT
+                    ).show()
+                    onComplete(false)
+                }
+            } catch (e: Exception) {
+                Toast.makeText(
+                    this@MainActivity,
+                    "Failed to initialize payment: ${e.message}",
+                    Toast.LENGTH_SHORT
+                ).show()
+                onComplete(false)
+            }
+        }
+    }
+    
     // Helper method for payment gateway redirect (in a real app)
     private fun redirectToPaymentGateway(paymentMethod: PaymentMethod, amount: Double) {
         // This is a placeholder. In a real app, you would redirect to the payment gateway.
         val url = when (paymentMethod) {
             PaymentMethod.ONLINE_BANKING -> "https://example.com/fpx-payment?amount=$amount"
             PaymentMethod.E_WALLET -> "https://example.com/ewallet-payment?amount=$amount"
+            else -> "https://example.com/default-payment?amount=$amount"
         }
         
         val intent = Intent(Intent.ACTION_VIEW, Uri.parse(url))
@@ -468,14 +584,13 @@ class MainActivity : ComponentActivity() {
     }
     
     // Check coupon by vehicle number
-    private fun checkCouponByVehicle(vehicleNumber: String, onComplete: () -> Unit = {}) {
+    private fun checkCouponByVehicle(vehicleNumber: String, onComplete: () -> Unit) {
         _isCheckingCoupon = true
         lifecycleScope.launch {
             try {
                 val result = couponService.checkCouponByVehicle(vehicleNumber)
-                
                 if (result.isSuccess) {
-                    val (coupons, usages) = result.getOrDefault(Pair(emptyList(), emptyList()))
+                    val (coupons, usages) = result.getOrNull() ?: Pair(emptyList(), emptyList())
                     _checkCouponResults = coupons.toMutableList()
                     _checkUsageResults = usages.toMutableList()
                 } else {
@@ -484,8 +599,6 @@ class MainActivity : ComponentActivity() {
                         "Failed to check coupon: ${result.exceptionOrNull()?.message}",
                         Toast.LENGTH_SHORT
                     ).show()
-                    _checkCouponResults = mutableListOf()
-                    _checkUsageResults = mutableListOf()
                 }
             } catch (e: Exception) {
                 Toast.makeText(
@@ -493,8 +606,6 @@ class MainActivity : ComponentActivity() {
                     "Failed to check coupon: ${e.message}",
                     Toast.LENGTH_SHORT
                 ).show()
-                _checkCouponResults = mutableListOf()
-                _checkUsageResults = mutableListOf()
             } finally {
                 _isCheckingCoupon = false
                 onComplete()
@@ -502,37 +613,128 @@ class MainActivity : ComponentActivity() {
         }
     }
     
-    // Check coupon by location
-    private fun checkCouponByLocation(parkingArea: String, lotNumber: String, onComplete: () -> Unit = {}) {
-        _isCheckingCoupon = true
+    // Stripe payment callback methods
+    fun onStripePaymentCompleted() {
+        _isPaymentProcessing = false
+        
+        // Clear cart and show success message
+        _currentCart.clear()
+        
+        // 确保重新加载优惠券
+        loadCoupons()
+        
+        Toast.makeText(
+            this,
+            "Payment successful! Coupons added to your account.",
+            Toast.LENGTH_LONG
+        ).show()
+        
+        // 返回主界面并触发重组
+        lifecycleScope.launch {
+            setContent {
+                SibuParkingTheme {
+                    // This will trigger a recomposition with updated state
+                }
+            }
+        }
+    }
+    
+    fun onStripePaymentCanceled() {
+        _isPaymentProcessing = false
+        
+        Toast.makeText(
+            this,
+            "Payment was canceled",
+            Toast.LENGTH_SHORT
+        ).show()
+        
+        // Refresh the UI state
+        setContent {
+            SibuParkingTheme {
+                // This will trigger a recomposition with updated state
+            }
+        }
+    }
+    
+    fun onStripePaymentFailed(error: Throwable) {
+        _isPaymentProcessing = false
+        
+        Toast.makeText(
+            this,
+            "Payment failed: ${error.message}",
+            Toast.LENGTH_SHORT
+        ).show()
+        
+        // Refresh the UI state
+        setContent {
+            SibuParkingTheme {
+                // This will trigger a recomposition with updated state
+            }
+        }
+    }
+    
+    private fun setupStripeResultHandling() {
+        // 这个方法会在Activity重新创建时调用，处理支付结果回调
+        if (::stripeService.isInitialized) {
+            stripeService.handlePaymentResult(
+                onSuccess = {
+                    handlePaymentSuccess()
+                },
+                onFailure = {
+                    handlePaymentFailure()
+                }
+            )
+        }
+    }
+    
+    private fun handlePaymentSuccess() {
+        runOnUiThread {
+            _isPaymentProcessing = false
+            purchaseCoupons(_currentCart, PaymentMethod.STRIPE) { success ->
+                if (success) {
+                    _currentCart.clear()
+                    loadCoupons()
+                    // 确保购买成功后导航回主页
+                    setContent {
+                        SibuParkingTheme {
+                            // 这会触发界面重新组合
+                        }
+                    }
+                    Toast.makeText(this@MainActivity, "Payment successful! Coupons added to your account.", Toast.LENGTH_LONG).show()
+                } else {
+                    Toast.makeText(this@MainActivity, "Payment failed. Please try again later.", Toast.LENGTH_LONG).show()
+                }
+            }
+        }
+    }
+    
+    private fun handlePaymentFailure() {
+        runOnUiThread {
+            _isPaymentProcessing = false
+            Toast.makeText(this@MainActivity, "Payment failed. Please try again later.", Toast.LENGTH_LONG).show()
+        }
+    }
+    
+    /**
+     * Test if Stripe is properly connected
+     */
+    private fun testStripeConnection() {
         lifecycleScope.launch {
             try {
-                val result = couponService.checkCouponByLocation(parkingArea, lotNumber)
-                
+                val result = stripeService.testStripeConnection()
                 if (result.isSuccess) {
-                    val (coupons, usages) = result.getOrDefault(Pair(emptyList(), emptyList()))
-                    _checkCouponResults = coupons.toMutableList()
-                    _checkUsageResults = usages.toMutableList()
+                    // Connection successful
+                    android.util.Log.d("MainActivity", "Stripe connection test successful")
+                    // Uncomment the next line to show a toast message
+                    // Toast.makeText(this@MainActivity, "Stripe connection successful", Toast.LENGTH_SHORT).show()
                 } else {
-                    Toast.makeText(
-                        this@MainActivity,
-                        "Failed to check coupon: ${result.exceptionOrNull()?.message}",
-                        Toast.LENGTH_SHORT
-                    ).show()
-                    _checkCouponResults = mutableListOf()
-                    _checkUsageResults = mutableListOf()
+                    // Connection failed
+                    android.util.Log.e("MainActivity", "Stripe connection test failed: ${result.exceptionOrNull()?.message}")
+                    // Uncomment the next line to show a toast message
+                    // Toast.makeText(this@MainActivity, "Failed to connect to Stripe: ${result.exceptionOrNull()?.message}", Toast.LENGTH_SHORT).show()
                 }
             } catch (e: Exception) {
-                Toast.makeText(
-                    this@MainActivity,
-                    "Failed to check coupon: ${e.message}",
-                    Toast.LENGTH_SHORT
-                ).show()
-                _checkCouponResults = mutableListOf()
-                _checkUsageResults = mutableListOf()
-            } finally {
-                _isCheckingCoupon = false
-                onComplete()
+                android.util.Log.e("MainActivity", "Error testing Stripe connection: ${e.message}")
             }
         }
     }

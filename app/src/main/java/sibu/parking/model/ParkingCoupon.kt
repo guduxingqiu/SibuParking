@@ -41,7 +41,7 @@ data class ParkingArea(
     val isFavorite: Boolean = false
 )
 
-data class CouponUsage(
+/*data class CouponUsage(
     val id: String = "",
     val couponId: String = "",
     val userId: String = "",
@@ -50,4 +50,4 @@ data class CouponUsage(
     val parkingLotNumber: String = "",
     val vehicleNumber: String = "",
     val timestamp: Long = System.currentTimeMillis()
-) 
+) */
