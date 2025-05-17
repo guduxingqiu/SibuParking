@@ -2,15 +2,11 @@ package sibu.parking.ui.screens
 
 import androidx.compose.foundation.layout.*
 import androidx.compose.material.icons.Icons
-import androidx.compose.material.icons.filled.Check
-import androidx.compose.material.icons.filled.Logout
-import androidx.compose.material.icons.filled.Report
-import androidx.compose.material.icons.filled.Search
+import androidx.compose.material.icons.filled.*
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
-import androidx.compose.ui.tooling.preview.Preview
 import androidx.compose.ui.unit.dp
 
 @OptIn(ExperimentalMaterial3Api::class)
@@ -18,64 +14,75 @@ import androidx.compose.ui.unit.dp
 fun StaffHomeScreen(
     username: String,
     onNavigateToCheckCoupon: () -> Unit,
-    onNavigateToReport: () -> Unit,
-    onLogout: () -> Unit
+    onNavigateToReportManagement: () -> Unit,
+    onNavigateToStaffMenu: () -> Unit,
+    onSignOut: () -> Unit
 ) {
+    var showSignOutDialog by remember { mutableStateOf(false) }
+    
     Scaffold(
         topBar = {
             TopAppBar(
-                title = { Text("SibuParking - Staff") },
+                title = { Text("Welcome, $username") },
                 actions = {
-                    IconButton(onClick = onLogout) {
-                        Icon(Icons.Default.Logout, contentDescription = "Logout")
+                    IconButton(onClick = onNavigateToStaffMenu) {
+                        Icon(Icons.Default.Person, contentDescription = "Staff Menu")
                     }
                 }
             )
         }
+
     ) { paddingValues ->
         Column(
             modifier = Modifier
                 .fillMaxSize()
                 .padding(paddingValues)
                 .padding(16.dp),
-            horizontalAlignment = Alignment.CenterHorizontally,
             verticalArrangement = Arrangement.spacedBy(16.dp)
         ) {
-            Text(
-                text = "Staff Portal: $username",
-                style = MaterialTheme.typography.headlineMedium
-            )
-            
             // Check Coupon Button
             Button(
                 onClick = onNavigateToCheckCoupon,
                 modifier = Modifier.fillMaxWidth()
             ) {
-                Icon(Icons.Default.Search, contentDescription = null)
-                Spacer(Modifier.width(8.dp))
+                Icon(Icons.Default.LocalOffer, contentDescription = null)
+                Spacer(modifier = Modifier.width(8.dp))
                 Text("Check Coupon")
             }
             
-            // Report Button
+            // Check Report Button
             Button(
-                onClick = onNavigateToReport,
+                onClick = onNavigateToReportManagement,
                 modifier = Modifier.fillMaxWidth()
             ) {
                 Icon(Icons.Default.Report, contentDescription = null)
-                Spacer(Modifier.width(8.dp))
-                Text("Report Issue")
+                Spacer(modifier = Modifier.width(8.dp))
+                Text("Report")
             }
         }
     }
-}
-
-@Preview(showBackground = true)
-@Composable
-fun StaffHomeScreenPreview() {
-    StaffHomeScreen(
-        username = "Admin",
-        onNavigateToCheckCoupon = { },
-        onNavigateToReport = { },
-        onLogout = { }
-    )
+    
+    // Sign Out Confirmation Dialog
+    if (showSignOutDialog) {
+        AlertDialog(
+            onDismissRequest = { showSignOutDialog = false },
+            title = { Text("Sign Out") },
+            text = { Text("Are you sure you want to sign out?") },
+            confirmButton = {
+                TextButton(
+                    onClick = {
+                        onSignOut()
+                        showSignOutDialog = false
+                    }
+                ) {
+                    Text("Sign Out")
+                }
+            },
+            dismissButton = {
+                TextButton(onClick = { showSignOutDialog = false }) {
+                    Text("Cancel")
+                }
+            }
+        )
+    }
 } 

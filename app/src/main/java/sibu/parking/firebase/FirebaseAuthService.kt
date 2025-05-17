@@ -8,6 +8,7 @@ import com.google.firebase.firestore.FirebaseFirestore
 import kotlinx.coroutines.tasks.await
 import sibu.parking.model.User
 import sibu.parking.model.UserType
+import com.google.firebase.auth.EmailAuthProvider
 /*import com.google.firebase.firestore.Source
 import android.util.Log*/
 
@@ -29,8 +30,9 @@ class FirebaseAuthService {
     
     // Check if username is unique
     suspend fun isUsernameUnique(username: String): Boolean {
+        val normalizedUsername = username.trim().lowercase()
         val snapshot = firestore.collection("users")
-            .whereEqualTo("username", username)
+            .whereEqualTo("username", normalizedUsername)
             .get()
             .await()
         return snapshot.isEmpty
@@ -43,7 +45,7 @@ class FirebaseAuthService {
             if (!isUsernameUnique(username)) {
                 return Result.failure(Exception("Username already exists"))
             }
-            
+
             val authResult = auth.createUserWithEmailAndPassword(email, password).await()
             val firebaseUser = authResult.user ?: throw Exception("User creation failed")
             
@@ -145,5 +147,49 @@ class FirebaseAuthService {
     // Logout
     fun logout() {
         auth.signOut()
+    }
+    
+    // Update username
+    suspend fun updateUsername(newUsername: String): Result<User> {
+        return try {
+            val currentUser = auth.currentUser ?: return Result.failure(Exception("User not logged in"))
+            
+            // Check if username is already taken
+            if (!isUsernameUnique(newUsername)) {
+                return Result.failure(Exception("Username already exists"))
+            }
+            
+            // Update username in Firestore
+            firestore.collection("users").document(currentUser.uid)
+                .update("username", newUsername)
+                .await()
+            
+            // Get updated user data
+            val userDoc = firestore.collection("users").document(currentUser.uid).get().await()
+            val user = userDoc.toObject(User::class.java)
+                ?: return Result.failure(Exception("Failed to get user data"))
+            
+            Result.success(user)
+        } catch (e: Exception) {
+            Result.failure(e)
+        }
+    }
+    
+    // Update password
+    suspend fun updatePassword(currentPassword: String, newPassword: String): Result<Boolean> {
+        return try {
+            val currentUser = auth.currentUser ?: return Result.failure(Exception("User not logged in"))
+            
+            // Reauthenticate user
+            val credential = EmailAuthProvider.getCredential(currentUser.email!!, currentPassword)
+            currentUser.reauthenticate(credential).await()
+            
+            // Update password
+            currentUser.updatePassword(newPassword).await()
+            
+            Result.success(true)
+        } catch (e: Exception) {
+            Result.failure(e)
+        }
     }
 } 

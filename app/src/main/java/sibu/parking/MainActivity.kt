@@ -13,9 +13,11 @@ import androidx.compose.material3.Surface
 import androidx.compose.runtime.*
 import androidx.compose.ui.Modifier
 import androidx.lifecycle.lifecycleScope
+import com.google.firebase.firestore.FirebaseFirestore
 import com.stripe.android.paymentsheet.PaymentSheet
 import kotlinx.coroutines.flow.collectLatest
 import kotlinx.coroutines.launch
+import kotlinx.coroutines.tasks.await
 import sibu.parking.firebase.FirebaseAuthService
 import sibu.parking.firebase.FirebaseCouponService
 import sibu.parking.firebase.FirebaseReportService
@@ -36,7 +38,7 @@ import sibu.parking.ui.screens.*
 import sibu.parking.ui.theme.SibuParkingTheme
 
 enum class AppScreen {
-    LOGIN, REGISTER, USER_HOME, STAFF_HOME, USE_COUPON, BUY_COUPON, CHECK_COUPON, EMAIL_VERIFICATION, STRIPE_PAYMENT, REPORT, PARKING_HISTORY
+    LOGIN, REGISTER, USER_HOME, STAFF_HOME, USE_COUPON, BUY_COUPON, CHECK_COUPON, EMAIL_VERIFICATION, STRIPE_PAYMENT, REPORT, PARKING_HISTORY, USER_MENU, STAFF_MENU, REPORT_MANAGEMENT,
 }
 
 enum class PaymentProvider {
@@ -49,6 +51,7 @@ class MainActivity : ComponentActivity() {
     private val couponService = FirebaseCouponService()
     private val reportService = FirebaseReportService()
     private lateinit var stripeService: StripeService
+    private val firestore = FirebaseFirestore.getInstance()
     
     private var _checkCouponResults = mutableListOf<ParkingCoupon>()
     private var _checkUsageResults = mutableListOf<CouponUsage>()
@@ -68,6 +71,8 @@ class MainActivity : ComponentActivity() {
     
     private var _userParkingHistory by mutableStateOf<List<CouponUsage>>(emptyList())
     private var _isLoadingParkingHistory by mutableStateOf(false)
+    
+    private var _currentUser by mutableStateOf<User?>(null)
     
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
@@ -372,29 +377,95 @@ class MainActivity : ComponentActivity() {
                                 }
                             )
                         }
-                        currentUser?.userType == UserType.STAFF -> {
-                            StaffHomeScreen(
-                                username = currentUser?.username ?: currentUser?.email ?: "",
-                                onLogout = {
+                        currentScreen == AppScreen.USER_MENU -> {
+                            var currentUser by remember { mutableStateOf<User?>(null) }
+                            
+                            // 加载当前用户信息
+                            LaunchedEffect(Unit) {
+                                try {
+                                    val user = authService.getCurrentUser()?.let { firebaseUser ->
+                                        val userDoc = firestore.collection("users").document(firebaseUser.uid).get().await()
+                                        userDoc.toObject(User::class.java)
+                                    }
+                                    currentUser = user
+                                } catch (e: Exception) {
+                                    Toast.makeText(this@MainActivity, "Failed to load user data", Toast.LENGTH_SHORT).show()
+                                }
+                            }
+                            
+                            UserMenuScreen(
+                                username = currentUser?.username ?: "",
+                                email = currentUser?.email ?: "",
+                                onBackClick = {
+                                    currentScreen = AppScreen.USER_HOME
+                                },
+                                onUpdatePassword = { currentPassword, newPassword, confirmPassword ->
+                                    updatePassword(currentPassword, newPassword, confirmPassword)
+                                },
+                                onSignOut = {
                                     authService.logout()
                                     currentUser = null
                                     currentScreen = AppScreen.LOGIN
                                 },
+                                onUpdateUsername = { newUsername ->
+                                    updateUsername(newUsername)
+                                },
+                                checkUsernameExists = { username ->
+                                    !authService.isUsernameUnique(username)
+                                }
+                            )
+                        }
+                        currentScreen == AppScreen.STAFF_MENU -> {
+                            StaffMenuScreen(
+                                username = currentUser?.username ?: "",
+                                email = currentUser?.email ?: "",
+                                onBackClick = { currentScreen = AppScreen.STAFF_HOME },
+                                onUpdatePassword = { currentPassword, newPassword, confirmPassword ->
+                                    lifecycleScope.launch {
+                                        try {
+                                            authService.updatePassword(currentPassword, newPassword)
+                                            Toast.makeText(this@MainActivity, "Password updated successfully", Toast.LENGTH_SHORT).show()
+                                        } catch (e: Exception) {
+                                            Toast.makeText(this@MainActivity, e.message ?: "Failed to update password", Toast.LENGTH_SHORT).show()
+                                        }
+                                    }
+                                },
+                                onSignOut = {
+                                    lifecycleScope.launch {
+                                        try {
+                                            authService.logout()
+                                            currentUser = null
+                                            currentScreen = AppScreen.LOGIN
+                                        } catch (e: Exception) {
+                                            Toast.makeText(this@MainActivity, e.message ?: "Failed to sign out", Toast.LENGTH_SHORT).show()
+                                        }
+                                    }
+                                }
+                            )
+                        }
+                        currentScreen == AppScreen.STAFF_HOME -> {
+                            StaffHomeScreen(
+                                username = currentUser?.username ?: "",
                                 onNavigateToCheckCoupon = {
-                                    // Reset results before navigating to check screen
-                                    _checkCouponResults = mutableListOf()
-                                    _checkUsageResults = mutableListOf()
                                     currentScreen = AppScreen.CHECK_COUPON
                                 },
-                                onNavigateToReport = {
-                                    currentScreen = AppScreen.REPORT
-                                    loadReports()
+                                onNavigateToReportManagement = {
+                                    currentScreen = AppScreen.REPORT_MANAGEMENT
+                                },
+                                onNavigateToStaffMenu = {
+                                    currentScreen = AppScreen.STAFF_MENU
+                                },
+                                onSignOut = {
+                                    authService.logout()
+                                    currentUser = null
+                                    currentScreen = AppScreen.LOGIN
                                 }
                             )
                         }
                         else -> {
                             UserHomeScreen(
                                 username = currentUser?.username ?: currentUser?.email ?: "",
+                                email = currentUser?.email ?: "",
                                 onLogout = {
                                     authService.logout()
                                     currentUser = null
@@ -414,6 +485,9 @@ class MainActivity : ComponentActivity() {
                                 onNavigateToParkingHistory = {
                                     currentScreen = AppScreen.PARKING_HISTORY
                                     loadParkingHistory()
+                                },
+                                onNavigateToUserMenu = {
+                                    currentScreen = AppScreen.USER_MENU
                                 }
                             )
                         }
@@ -882,6 +956,58 @@ class MainActivity : ComponentActivity() {
                 Toast.makeText(
                     this@MainActivity,
                     "Failed to update status: ${e.message}",
+                    Toast.LENGTH_SHORT
+                ).show()
+            }
+        }
+    }
+
+    // 在MainActivity类中添加更新用户名和密码的方法
+    private fun updateUsername(newUsername: String) {
+        lifecycleScope.launch {
+            try {
+                val result = authService.updateUsername(newUsername)
+                if (result.isSuccess) {
+                    Toast.makeText(this@MainActivity, "Username updated successfully", Toast.LENGTH_SHORT).show()
+                    // 重新加载用户信息
+                    val user = result.getOrNull()
+                    if (user != null) {
+                        _currentUser = user
+                    }
+                } else {
+                    Toast.makeText(
+                        this@MainActivity,
+                        "Failed to update username: ${result.exceptionOrNull()?.message}",
+                        Toast.LENGTH_SHORT
+                    ).show()
+                }
+            } catch (e: Exception) {
+                Toast.makeText(
+                    this@MainActivity,
+                    "Failed to update username: ${e.message}",
+                    Toast.LENGTH_SHORT
+                ).show()
+            }
+        }
+    }
+
+    private fun updatePassword(currentPassword: String, newPassword: String, confirmPassword: String) {
+        lifecycleScope.launch {
+            try {
+                val result = authService.updatePassword(currentPassword, newPassword)
+                if (result.isSuccess) {
+                    Toast.makeText(this@MainActivity, "Password updated successfully", Toast.LENGTH_SHORT).show()
+                } else {
+                    Toast.makeText(
+                        this@MainActivity,
+                        "Failed to update password: ${result.exceptionOrNull()?.message}",
+                        Toast.LENGTH_SHORT
+                    ).show()
+                }
+            } catch (e: Exception) {
+                Toast.makeText(
+                    this@MainActivity,
+                    "Failed to update password: ${e.message}",
                     Toast.LENGTH_SHORT
                 ).show()
             }

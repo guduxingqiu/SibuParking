@@ -15,19 +15,21 @@ import androidx.compose.ui.unit.dp
 @Composable
 fun UserHomeScreen(
     username: String,
+    email: String,
     onLogout: () -> Unit,
     onNavigateToBuyCoupon: () -> Unit,
     onNavigateToUseCoupon: () -> Unit,
     onNavigateToReport: () -> Unit,
-    onNavigateToParkingHistory: () -> Unit
+    onNavigateToParkingHistory: () -> Unit,
+    onNavigateToUserMenu: () -> Unit
 ) {
     Scaffold(
         topBar = {
             TopAppBar(
                 title = { Text("Welcome, $username") },
                 actions = {
-                    IconButton(onClick = onLogout) {
-                        Icon(Icons.Default.Logout, contentDescription = "Logout")
+                    IconButton(onClick = onNavigateToUserMenu) {
+                        Icon(Icons.Default.Person, contentDescription = "User Menu")
                     }
                 }
             )
@@ -44,7 +46,7 @@ fun UserHomeScreen(
             Button(
                 onClick = onNavigateToBuyCoupon,
                 modifier = Modifier.fillMaxWidth()
-            ) {
+                ) {
                 Text("Buy Coupon")
             }
             
@@ -61,11 +63,11 @@ fun UserHomeScreen(
             ) {
                 Text("Report Issue")
             }
-            
-            Button(
+                    
+                    Button(
                 onClick = onNavigateToParkingHistory,
-                modifier = Modifier.fillMaxWidth()
-            ) {
+                        modifier = Modifier.fillMaxWidth()
+                    ) {
                 Text("Parking History")
             }
         }
@@ -77,10 +79,12 @@ fun UserHomeScreen(
 fun UserHomeScreenPreview() {
     UserHomeScreen(
         username = "John Doe",
+        email = "john.doe@example.com",
         onLogout = { },
         onNavigateToBuyCoupon = { },
         onNavigateToUseCoupon = { },
         onNavigateToReport = { },
-        onNavigateToParkingHistory = { }
+        onNavigateToParkingHistory = { },
+        onNavigateToUserMenu = { }
     )
 } 
