@@ -20,23 +20,20 @@ class FirebaseAuthService {
         return auth.currentUser
     }
     
+    // 获取当前用户类型
+    suspend fun getUserType(): UserType? {
+        val userId = auth.currentUser?.uid ?: return null
+        val userDoc = firestore.collection("users").document(userId).get().await()
+        return userDoc.getString("userType")?.let { UserType.valueOf(it) }
+    }
+    
     // Check if username is unique
     suspend fun isUsernameUnique(username: String): Boolean {
-        return try {
-            val querySnapshot = firestore.collection("users")
-                .whereEqualTo("username", username.trim().lowercase())
-                .get()
-                .await()
-                
-            querySnapshot.isEmpty
-        } catch (e: Exception) {
-            // If there's an error, conservatively return false
-            false
-            /*// 记录详细错误
-            Log.e("Auth", "Username check failed", e)
-            // 改为抛出异常而不是返回false
-            throw e*/
-        }
+        val snapshot = firestore.collection("users")
+            .whereEqualTo("username", username)
+            .get()
+            .await()
+        return snapshot.isEmpty
     }
     
     // Register with email and password

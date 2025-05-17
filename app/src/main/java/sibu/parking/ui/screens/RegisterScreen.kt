@@ -53,7 +53,7 @@ fun RegisterScreen(
     
     // Debounced username check
     fun checkUsername(input: String) {
-        if (input.length < 3) {
+        if (input.length >= 3) {
             isUsernameAvailable = null
             return
         }

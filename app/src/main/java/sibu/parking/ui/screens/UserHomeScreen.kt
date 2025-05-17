@@ -2,9 +2,8 @@ package sibu.parking.ui.screens
 
 import androidx.compose.foundation.layout.*
 import androidx.compose.material.icons.Icons
-import androidx.compose.material.icons.filled.CreditCard
-import androidx.compose.material.icons.filled.Logout
-import androidx.compose.material.icons.filled.ShoppingCart
+import androidx.compose.material.icons.filled.*
+import androidx.compose.material.icons.outlined.Search
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
@@ -17,13 +16,15 @@ import androidx.compose.ui.unit.dp
 fun UserHomeScreen(
     username: String,
     onLogout: () -> Unit,
-    onUseCouponClick: () -> Unit,
-    onBuyCouponClick: () -> Unit
+    onNavigateToBuyCoupon: () -> Unit,
+    onNavigateToUseCoupon: () -> Unit,
+    onNavigateToReport: () -> Unit,
+    onNavigateToParkingHistory: () -> Unit
 ) {
     Scaffold(
         topBar = {
             TopAppBar(
-                title = { Text("SibuParking - User") },
+                title = { Text("Welcome, $username") },
                 actions = {
                     IconButton(onClick = onLogout) {
                         Icon(Icons.Default.Logout, contentDescription = "Logout")
@@ -38,68 +39,34 @@ fun UserHomeScreen(
                 .padding(paddingValues)
                 .padding(16.dp),
             horizontalAlignment = Alignment.CenterHorizontally,
-            verticalArrangement = Arrangement.Center
+            verticalArrangement = Arrangement.spacedBy(16.dp)
         ) {
-            Text(
-                text = "Welcome, $username",
-                style = MaterialTheme.typography.headlineMedium
-            )
-            
-            Spacer(modifier = Modifier.height(32.dp))
-            
-            // User Actions
-            Card(
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .padding(8.dp)
+            Button(
+                onClick = onNavigateToBuyCoupon,
+                modifier = Modifier.fillMaxWidth()
             ) {
-                Column(
-                    modifier = Modifier
-                        .fillMaxWidth()
-                        .padding(16.dp),
-                    horizontalAlignment = Alignment.CenterHorizontally
-                ) {
-                    Text(
-                        text = "Parking Actions",
-                        style = MaterialTheme.typography.titleLarge,
-                        modifier = Modifier.padding(bottom = 16.dp)
-                    )
-                    
-                    // Use Coupon Button
-                    Button(
-                        onClick = onUseCouponClick,
-                        modifier = Modifier
-                            .fillMaxWidth()
-                            .height(50.dp)
-                            .padding(bottom = 8.dp)
-                    ) {
-                        Icon(
-                            imageVector = Icons.Default.CreditCard,
-                            contentDescription = null,
-                            modifier = Modifier.size(ButtonDefaults.IconSize)
-                        )
-                        Spacer(Modifier.size(ButtonDefaults.IconSpacing))
-                        Text("Use Coupon")
-                    }
-                    
-                    // Buy Coupon Button
-                    Button(
-                        onClick = onBuyCouponClick,
-                        modifier = Modifier
-                            .fillMaxWidth()
-                            .height(50.dp)
-                    ) {
-                        Icon(
-                            imageVector = Icons.Default.ShoppingCart,
-                            contentDescription = null,
-                            modifier = Modifier.size(ButtonDefaults.IconSize)
-                        )
-                        Spacer(Modifier.size(ButtonDefaults.IconSpacing))
-                        Text("Buy Coupon")
-                    }
-                    
-                    // Additional user actions can be added here
-                }
+                Text("Buy Coupon")
+            }
+            
+            Button(
+                onClick = onNavigateToUseCoupon,
+                modifier = Modifier.fillMaxWidth()
+            ) {
+                Text("Use Coupon")
+            }
+            
+            Button(
+                onClick = onNavigateToReport,
+                modifier = Modifier.fillMaxWidth()
+            ) {
+                Text("Report Issue")
+            }
+            
+            Button(
+                onClick = onNavigateToParkingHistory,
+                modifier = Modifier.fillMaxWidth()
+            ) {
+                Text("Parking History")
             }
         }
     }
@@ -111,7 +78,9 @@ fun UserHomeScreenPreview() {
     UserHomeScreen(
         username = "John Doe",
         onLogout = { },
-        onUseCouponClick = { },
-        onBuyCouponClick = { }
+        onNavigateToBuyCoupon = { },
+        onNavigateToUseCoupon = { },
+        onNavigateToReport = { },
+        onNavigateToParkingHistory = { }
     )
 } 

@@ -175,10 +175,10 @@ class FirebaseCouponService {
             
             // 计算过期时间
             val expirationTime = when (CouponType.valueOf(typeStr)) {
-                CouponType.MINUTES_30 -> System.currentTimeMillis() + (30 * 60 * 1000) // 30分钟
-                CouponType.HOUR_1 -> System.currentTimeMillis() + (60 * 60 * 1000) // 1小时
-                CouponType.HOURS_2 -> System.currentTimeMillis() + (2 * 60 * 60 * 1000) // 2小时
-                CouponType.HOURS_24 -> System.currentTimeMillis() + (24 * 60 * 60 * 1000) // 24小时
+                CouponType.MINUTES_30 -> System.currentTimeMillis() + (30 * 60 * 1000 * usedCount) // 30分钟
+                CouponType.HOUR_1 -> System.currentTimeMillis() + (60 * 60 * 1000 * usedCount) // 1小时
+                CouponType.HOURS_2 -> System.currentTimeMillis() + (2 * 60 * 60 * 1000 * usedCount) // 2小时
+                CouponType.HOURS_24 -> System.currentTimeMillis() + (24 * 60 * 60 * 1000 * usedCount) // 24小时
             }
             
             // 更新已使用次数和剩余次数
@@ -325,6 +325,27 @@ class FirebaseCouponService {
             Result.success(vehicle)
         } catch (e: Exception) {
             Result.failure(e)
+        }
+    }
+    
+    // 获取用户停车历史
+    suspend fun getUserParkingHistory(): Flow<List<CouponUsage>> = flow {
+        try {
+            val userId = auth.currentUser?.uid ?: return@flow
+            
+            val snapshot = firestore.collection("couponUsages")
+                .whereEqualTo("userId", userId)
+                .get()
+                .await()
+                
+            val usages = snapshot.documents.mapNotNull { doc ->
+                doc.toObject(CouponUsage::class.java)
+            }.sortedByDescending { it.timestamp }
+            
+            emit(usages)
+        } catch (e: Exception) {
+            android.util.Log.e("FirebaseCouponService", "Error getting parking history: ${e.message}")
+            emit(emptyList())
         }
     }
 } 

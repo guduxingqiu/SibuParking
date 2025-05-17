@@ -18,6 +18,7 @@ import kotlinx.coroutines.flow.collectLatest
 import kotlinx.coroutines.launch
 import sibu.parking.firebase.FirebaseAuthService
 import sibu.parking.firebase.FirebaseCouponService
+import sibu.parking.firebase.FirebaseReportService
 import sibu.parking.firebase.StripeService
 import sibu.parking.model.Cart
 import sibu.parking.model.CouponType
@@ -25,6 +26,9 @@ import sibu.parking.model.CouponUsage
 import sibu.parking.model.ParkingArea
 import sibu.parking.model.ParkingCoupon
 import sibu.parking.model.PaymentMethod
+import sibu.parking.model.Report
+import sibu.parking.model.ReportType
+import sibu.parking.model.ReportStatus
 import sibu.parking.model.User
 import sibu.parking.model.UserType
 import sibu.parking.model.Vehicle
@@ -32,7 +36,7 @@ import sibu.parking.ui.screens.*
 import sibu.parking.ui.theme.SibuParkingTheme
 
 enum class AppScreen {
-    LOGIN, REGISTER, USER_HOME, STAFF_HOME, USE_COUPON, BUY_COUPON, CHECK_COUPON, EMAIL_VERIFICATION, STRIPE_PAYMENT
+    LOGIN, REGISTER, USER_HOME, STAFF_HOME, USE_COUPON, BUY_COUPON, CHECK_COUPON, EMAIL_VERIFICATION, STRIPE_PAYMENT, REPORT, PARKING_HISTORY
 }
 
 enum class PaymentProvider {
@@ -43,6 +47,7 @@ class MainActivity : ComponentActivity() {
     
     private val authService = FirebaseAuthService()
     private val couponService = FirebaseCouponService()
+    private val reportService = FirebaseReportService()
     private lateinit var stripeService: StripeService
     
     private var _checkCouponResults = mutableListOf<ParkingCoupon>()
@@ -55,6 +60,14 @@ class MainActivity : ComponentActivity() {
     private var _isPaymentProcessing = false
     private var userCoupons by mutableStateOf<List<ParkingCoupon>>(emptyList())
     private var isLoadingCoupons by mutableStateOf(false)
+    
+    private var _userReports by mutableStateOf<List<Report>>(emptyList())
+    private var _isLoadingReports by mutableStateOf(false)
+    
+    private var _currentScreen by mutableStateOf<AppScreen>(AppScreen.LOGIN)
+    
+    private var _userParkingHistory by mutableStateOf<List<CouponUsage>>(emptyList())
+    private var _isLoadingParkingHistory by mutableStateOf(false)
     
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
@@ -139,6 +152,23 @@ class MainActivity : ComponentActivity() {
                     
                     fun updatePaymentState() {
                         isPaymentProcessing = _isPaymentProcessing
+                    }
+                    
+                    // 添加加载停车历史的方法
+                    fun loadParkingHistory() {
+                        _isLoadingParkingHistory = true
+                        lifecycleScope.launch {
+                            try {
+                                couponService.getUserParkingHistory().collectLatest { usages ->
+                                    _userParkingHistory = usages
+                                    _isLoadingParkingHistory = false
+                                }
+                            } catch (e: Exception) {
+                                android.util.Log.e("MainActivity", "Error loading parking history: ${e.message}")
+                                _isLoadingParkingHistory = false
+                                Toast.makeText(this@MainActivity, "Failed to load parking history", Toast.LENGTH_SHORT).show()
+                            }
+                        }
                     }
                     
                     when {
@@ -316,6 +346,32 @@ class MainActivity : ComponentActivity() {
                                 }
                             )
                         }
+                        currentScreen == AppScreen.REPORT -> {
+                            ReportScreen(
+                                reports = _userReports,
+                                onCreateReport = { type, title, description, parkingArea, parkingLotNumber ->
+                                    createReport(type, title, description, parkingArea, parkingLotNumber)
+                                },
+                                onUpdateStatus = if (currentUser?.userType == UserType.STAFF) { { reportId, newStatus ->
+                                    updateReportStatus(reportId, newStatus)
+                                } } else null,
+                                onBackClick = {
+                                    currentScreen = if (currentUser?.userType == UserType.STAFF) {
+                                        AppScreen.STAFF_HOME
+                                    } else {
+                                        AppScreen.USER_HOME
+                                    }
+                                }
+                            )
+                        }
+                        currentScreen == AppScreen.PARKING_HISTORY -> {
+                            ParkingHistoryScreen(
+                                usages = _userParkingHistory,
+                                onBackClick = {
+                                    currentScreen = AppScreen.USER_HOME
+                                }
+                            )
+                        }
                         currentUser?.userType == UserType.STAFF -> {
                             StaffHomeScreen(
                                 username = currentUser?.username ?: currentUser?.email ?: "",
@@ -324,11 +380,15 @@ class MainActivity : ComponentActivity() {
                                     currentUser = null
                                     currentScreen = AppScreen.LOGIN
                                 },
-                                onCheckCouponClick = {
+                                onNavigateToCheckCoupon = {
                                     // Reset results before navigating to check screen
                                     _checkCouponResults = mutableListOf()
                                     _checkUsageResults = mutableListOf()
                                     currentScreen = AppScreen.CHECK_COUPON
+                                },
+                                onNavigateToReport = {
+                                    currentScreen = AppScreen.REPORT
+                                    loadReports()
                                 }
                             )
                         }
@@ -340,12 +400,20 @@ class MainActivity : ComponentActivity() {
                                     currentUser = null
                                     currentScreen = AppScreen.LOGIN
                                 },
-                                onUseCouponClick = {
+                                onNavigateToBuyCoupon = {
+                                    currentScreen = AppScreen.BUY_COUPON
+                                },
+                                onNavigateToUseCoupon = {
                                     loadCoupons() // Refresh coupons
                                     currentScreen = AppScreen.USE_COUPON
                                 },
-                                onBuyCouponClick = {
-                                    currentScreen = AppScreen.BUY_COUPON
+                                onNavigateToReport = {
+                                    currentScreen = AppScreen.REPORT
+                                    loadReports()
+                                },
+                                onNavigateToParkingHistory = {
+                                    currentScreen = AppScreen.PARKING_HISTORY
+                                    loadParkingHistory()
                                 }
                             )
                         }
@@ -735,6 +803,87 @@ class MainActivity : ComponentActivity() {
                 }
             } catch (e: Exception) {
                 android.util.Log.e("MainActivity", "Error testing Stripe connection: ${e.message}")
+            }
+        }
+    }
+    
+    private fun loadReports() {
+        _isLoadingReports = true
+        android.util.Log.d("MainActivity", "Starting to load reports")
+        
+        lifecycleScope.launch {
+            try {
+                reportService.getUserReports().collectLatest { reports ->
+                    android.util.Log.d("MainActivity", "Received ${reports.size} reports")
+                    _userReports = reports
+                    _isLoadingReports = false
+                }
+            } catch (e: Exception) {
+                android.util.Log.e("MainActivity", "Error loading reports: ${e.message}")
+                e.printStackTrace()
+                _isLoadingReports = false
+                Toast.makeText(this@MainActivity, "Failed to load reports", Toast.LENGTH_SHORT).show()
+            }
+        }
+    }
+    
+    private fun createReport(
+        type: ReportType,
+        title: String,
+        description: String,
+        parkingArea: String,
+        parkingLotNumber: String
+    ) {
+        lifecycleScope.launch {
+            try {
+                val result = reportService.createReport(
+                    type = type,
+                    title = title,
+                    description = description,
+                    parkingArea = parkingArea,
+                    parkingLotNumber = parkingLotNumber
+                )
+                
+                if (result.isSuccess) {
+                    Toast.makeText(this@MainActivity, "Report submitted successfully", Toast.LENGTH_SHORT).show()
+                    loadReports()  // 重新加载报告列表
+                } else {
+                    Toast.makeText(
+                        this@MainActivity,
+                        "Failed to submit report: ${result.exceptionOrNull()?.message}",
+                        Toast.LENGTH_SHORT
+                    ).show()
+                }
+            } catch (e: Exception) {
+                Toast.makeText(
+                    this@MainActivity,
+                    "Failed to submit report: ${e.message}",
+                    Toast.LENGTH_SHORT
+                ).show()
+            }
+        }
+    }
+    
+    private fun updateReportStatus(reportId: String, newStatus: ReportStatus) {
+        lifecycleScope.launch {
+            try {
+                val result = reportService.updateReportStatus(reportId, newStatus)
+                if (result.isSuccess) {
+                    Toast.makeText(this@MainActivity, "Status updated successfully", Toast.LENGTH_SHORT).show()
+                    loadReports()  // 重新加载报告列表
+                } else {
+                    Toast.makeText(
+                        this@MainActivity,
+                        "Failed to update status: ${result.exceptionOrNull()?.message}",
+                        Toast.LENGTH_SHORT
+                    ).show()
+                }
+            } catch (e: Exception) {
+                Toast.makeText(
+                    this@MainActivity,
+                    "Failed to update status: ${e.message}",
+                    Toast.LENGTH_SHORT
+                ).show()
             }
         }
     }

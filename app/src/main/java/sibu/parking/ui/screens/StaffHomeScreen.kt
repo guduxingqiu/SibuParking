@@ -4,6 +4,8 @@ import androidx.compose.foundation.layout.*
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Check
 import androidx.compose.material.icons.filled.Logout
+import androidx.compose.material.icons.filled.Report
+import androidx.compose.material.icons.filled.Search
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
@@ -15,8 +17,9 @@ import androidx.compose.ui.unit.dp
 @Composable
 fun StaffHomeScreen(
     username: String,
-    onLogout: () -> Unit,
-    onCheckCouponClick: () -> Unit
+    onNavigateToCheckCoupon: () -> Unit,
+    onNavigateToReport: () -> Unit,
+    onLogout: () -> Unit
 ) {
     Scaffold(
         topBar = {
@@ -36,51 +39,31 @@ fun StaffHomeScreen(
                 .padding(paddingValues)
                 .padding(16.dp),
             horizontalAlignment = Alignment.CenterHorizontally,
-            verticalArrangement = Arrangement.Center
+            verticalArrangement = Arrangement.spacedBy(16.dp)
         ) {
             Text(
                 text = "Staff Portal: $username",
                 style = MaterialTheme.typography.headlineMedium
             )
             
-            Spacer(modifier = Modifier.height(32.dp))
-            
-            // Staff Actions
-            Card(
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .padding(8.dp)
+            // Check Coupon Button
+            Button(
+                onClick = onNavigateToCheckCoupon,
+                modifier = Modifier.fillMaxWidth()
             ) {
-                Column(
-                    modifier = Modifier
-                        .fillMaxWidth()
-                        .padding(16.dp),
-                    horizontalAlignment = Alignment.CenterHorizontally
-                ) {
-                    Text(
-                        text = "Staff Actions",
-                        style = MaterialTheme.typography.titleLarge,
-                        modifier = Modifier.padding(bottom = 16.dp)
-                    )
-                    
-                    // Check Coupon Button
-                    Button(
-                        onClick = onCheckCouponClick,
-                        modifier = Modifier
-                            .fillMaxWidth()
-                            .height(50.dp)
-                    ) {
-                        Icon(
-                            imageVector = Icons.Default.Check,
-                            contentDescription = null,
-                            modifier = Modifier.size(ButtonDefaults.IconSize)
-                        )
-                        Spacer(Modifier.size(ButtonDefaults.IconSpacing))
-                        Text("Check Coupon")
-                    }
-                    
-                    // Additional staff actions can be added here
-                }
+                Icon(Icons.Default.Search, contentDescription = null)
+                Spacer(Modifier.width(8.dp))
+                Text("Check Coupon")
+            }
+            
+            // Report Button
+            Button(
+                onClick = onNavigateToReport,
+                modifier = Modifier.fillMaxWidth()
+            ) {
+                Icon(Icons.Default.Report, contentDescription = null)
+                Spacer(Modifier.width(8.dp))
+                Text("Report Issue")
             }
         }
     }
@@ -91,7 +74,8 @@ fun StaffHomeScreen(
 fun StaffHomeScreenPreview() {
     StaffHomeScreen(
         username = "Admin",
-        onLogout = { },
-        onCheckCouponClick = { }
+        onNavigateToCheckCoupon = { },
+        onNavigateToReport = { },
+        onLogout = { }
     )
 } 
