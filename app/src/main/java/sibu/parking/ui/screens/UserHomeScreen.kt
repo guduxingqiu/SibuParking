@@ -44,39 +44,47 @@ fun UserHomeScreen(
             verticalArrangement = Arrangement.spacedBy(16.dp)
         ) {
             Button(
+                onClick = onNavigateToUseCoupon,
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .height(144.dp)
+            ) {
+                Icon(Icons.Default.LocalOffer, contentDescription = null, modifier = Modifier.size(64.dp))
+                Spacer(modifier = Modifier.width(32.dp))
+                Text("Use Coupon", style = MaterialTheme.typography.headlineMedium)
+            }
+
+            Button(
                 onClick = onNavigateToBuyCoupon,
-                modifier = Modifier.fillMaxWidth()
-                ) {
-                Icon(Icons.Default.ShoppingCart, contentDescription = null)
-                Spacer(modifier = Modifier.width(8.dp))
-                Text("Buy Coupon")
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .height(144.dp)
+            ) {
+                Icon(Icons.Default.ShoppingCart, contentDescription = null, modifier = Modifier.size(64.dp))
+                Spacer(modifier = Modifier.width(32.dp))
+                Text("Buy Coupon", style = MaterialTheme.typography.headlineMedium)
             }
             
             Button(
-                onClick = onNavigateToUseCoupon,
-                modifier = Modifier.fillMaxWidth()
+                onClick = onNavigateToParkingHistory,
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .height(144.dp)
             ) {
-                Icon(Icons.Default.LocalOffer, contentDescription = null)
-                Spacer(modifier = Modifier.width(8.dp))
-                Text("Use Coupon")
+                Icon(Icons.Default.History, contentDescription = null, modifier = Modifier.size(64.dp))
+                Spacer(modifier = Modifier.width(32.dp))
+                Text("Parking History", style = MaterialTheme.typography.headlineMedium)
             }
-            
+
             Button(
                 onClick = onNavigateToReport,
-                modifier = Modifier.fillMaxWidth()
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .height(144.dp)
             ) {
-                Icon(Icons.Default.Report, contentDescription = null)
-                Spacer(modifier = Modifier.width(8.dp))
-                Text("Report Issue")
-            }
-                    
-                    Button(
-                onClick = onNavigateToParkingHistory,
-                        modifier = Modifier.fillMaxWidth()
-                    ) {
-                Icon(Icons.Default.History, contentDescription = null)
-                Spacer(modifier = Modifier.width(8.dp))
-                Text("Parking History")
+                Icon(Icons.Default.Report, contentDescription = null, modifier = Modifier.size(64.dp))
+                Spacer(modifier = Modifier.width(32.dp))
+                Text("Report Issue", style = MaterialTheme.typography.headlineMedium)
             }
         }
     }

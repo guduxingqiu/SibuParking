@@ -43,21 +43,25 @@ fun StaffHomeScreen(
             // Check Coupon Button
             Button(
                 onClick = onNavigateToCheckCoupon,
-                modifier = Modifier.fillMaxWidth()
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .height(144.dp)
             ) {
-                Icon(Icons.Default.LocalOffer, contentDescription = null)
-                Spacer(modifier = Modifier.width(8.dp))
-                Text("Check Coupon")
+                Icon(Icons.Default.LocalOffer, contentDescription = null, modifier = Modifier.size(64.dp))
+                Spacer(modifier = Modifier.width(32.dp))
+                Text("Check Coupon", style = MaterialTheme.typography.headlineMedium)
             }
             
             // Check Report Button
             Button(
                 onClick = onNavigateToReportManagement,
-                modifier = Modifier.fillMaxWidth()
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .height(144.dp)
             ) {
-                Icon(Icons.Default.Report, contentDescription = null)
-                Spacer(modifier = Modifier.width(8.dp))
-                Text("Report")
+                Icon(Icons.Default.Report, contentDescription = null, modifier = Modifier.size(64.dp))
+                Spacer(modifier = Modifier.width(32.dp))
+                Text("Report", style = MaterialTheme.typography.headlineMedium)
             }
         }
     }
