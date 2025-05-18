@@ -47,6 +47,8 @@ fun UserHomeScreen(
                 onClick = onNavigateToBuyCoupon,
                 modifier = Modifier.fillMaxWidth()
                 ) {
+                Icon(Icons.Default.ShoppingCart, contentDescription = null)
+                Spacer(modifier = Modifier.width(8.dp))
                 Text("Buy Coupon")
             }
             
@@ -54,6 +56,8 @@ fun UserHomeScreen(
                 onClick = onNavigateToUseCoupon,
                 modifier = Modifier.fillMaxWidth()
             ) {
+                Icon(Icons.Default.LocalOffer, contentDescription = null)
+                Spacer(modifier = Modifier.width(8.dp))
                 Text("Use Coupon")
             }
             
@@ -61,6 +65,8 @@ fun UserHomeScreen(
                 onClick = onNavigateToReport,
                 modifier = Modifier.fillMaxWidth()
             ) {
+                Icon(Icons.Default.Report, contentDescription = null)
+                Spacer(modifier = Modifier.width(8.dp))
                 Text("Report Issue")
             }
                     
@@ -68,6 +74,8 @@ fun UserHomeScreen(
                 onClick = onNavigateToParkingHistory,
                         modifier = Modifier.fillMaxWidth()
                     ) {
+                Icon(Icons.Default.History, contentDescription = null)
+                Spacer(modifier = Modifier.width(8.dp))
                 Text("Parking History")
             }
         }
