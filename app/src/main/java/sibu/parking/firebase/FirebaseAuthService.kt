@@ -9,8 +9,6 @@ import kotlinx.coroutines.tasks.await
 import sibu.parking.model.User
 import sibu.parking.model.UserType
 import com.google.firebase.auth.EmailAuthProvider
-/*import com.google.firebase.firestore.Source
-import android.util.Log*/
 
 class FirebaseAuthService {
     private val auth: FirebaseAuth = FirebaseAuth.getInstance()

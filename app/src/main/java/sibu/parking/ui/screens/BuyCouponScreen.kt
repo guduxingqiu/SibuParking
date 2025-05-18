@@ -160,6 +160,138 @@ fun BuyCouponScreen(
                 price = "RM 63.60",
                 onAddToCart = { onAddToCart(CouponType.HOURS_24) }
             )
+            
+            // Cart section
+            if (cart.items.isNotEmpty()) {
+                Text(
+                    text = "Shopping Cart",
+                    style = MaterialTheme.typography.titleLarge,
+                    modifier = Modifier.padding(vertical = 16.dp)
+                )
+                
+                cart.items.forEach { item ->
+                    Card(
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .padding(vertical = 8.dp)
+                    ) {
+                        Column(
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .padding(16.dp)
+                        ) {
+                            Row(
+                                modifier = Modifier.fillMaxWidth(),
+                                horizontalArrangement = Arrangement.SpaceBetween,
+                                verticalAlignment = Alignment.CenterVertically
+                            ) {
+                                Text(
+                                    text = item.getDisplayName(),
+                                    style = MaterialTheme.typography.titleMedium
+                                )
+                                Text(
+                                    text = "RM ${String.format("%.2f", item.getTotalPrice())}",
+                                    style = MaterialTheme.typography.titleMedium
+                                )
+                            }
+                            
+                            Spacer(modifier = Modifier.height(8.dp))
+                            
+                            Row(
+                                modifier = Modifier.fillMaxWidth(),
+                                horizontalArrangement = Arrangement.SpaceBetween,
+                                verticalAlignment = Alignment.CenterVertically
+                            ) {
+                                Row(
+                                    verticalAlignment = Alignment.CenterVertically
+                                ) {
+                                    IconButton(
+                                        onClick = { onUpdateQuantity(cart.items.indexOf(item), item.quantity - 1) },
+                                        enabled = item.quantity > 1
+                                    ) {
+                                        Icon(Icons.Default.Remove, contentDescription = "Decrease")
+                                    }
+                                    
+                                    Text(
+                                        text = item.quantity.toString(),
+                                        style = MaterialTheme.typography.bodyLarge,
+                                        modifier = Modifier.padding(horizontal = 16.dp)
+                                    )
+                                    
+                                    IconButton(
+                                        onClick = { onUpdateQuantity(cart.items.indexOf(item), item.quantity + 1) }
+                                    ) {
+                                        Icon(Icons.Default.Add, contentDescription = "Increase")
+                                    }
+                                }
+                                
+                                IconButton(
+                                    onClick = { onRemoveFromCart(cart.items.indexOf(item)) }
+                                ) {
+                                    Icon(Icons.Default.Delete, contentDescription = "Remove")
+                                }
+                            }
+                        }
+                    }
+                }
+                
+                Divider(modifier = Modifier.padding(vertical = 16.dp))
+                
+                Row(
+                    modifier = Modifier.fillMaxWidth(),
+                    horizontalArrangement = Arrangement.SpaceBetween
+                ) {
+                    Text(
+                        text = "Total",
+                        style = MaterialTheme.typography.titleLarge
+                    )
+                    Text(
+                        text = "RM ${String.format("%.2f", cart.getTotalPrice())}",
+                        style = MaterialTheme.typography.titleLarge
+                    )
+                }
+                
+                Spacer(modifier = Modifier.height(16.dp))
+                
+                // Payment method selection
+                Text(
+                    text = "Select Payment Method",
+                    style = MaterialTheme.typography.titleMedium,
+                    modifier = Modifier.padding(bottom = 8.dp)
+                )
+                
+                Row(
+                    modifier = Modifier.fillMaxWidth(),
+                    horizontalArrangement = Arrangement.spacedBy(8.dp)
+                ) {
+                    PaymentMethod.values().forEach { method ->
+                        FilterChip(
+                            selected = selectedPaymentMethod == method,
+                            onClick = { selectedPaymentMethod = method },
+                            label = { Text(method.name.replace("_", " ")) }
+                        )
+                    }
+                }
+                
+                Spacer(modifier = Modifier.height(16.dp))
+                
+                Button(
+                    onClick = { 
+                        selectedPaymentMethod?.let { onCheckout(it) }
+                    },
+                    modifier = Modifier.fillMaxWidth(),
+                    enabled = selectedPaymentMethod != null && !isProcessingPayment
+                ) {
+                    if (isProcessingPayment) {
+                        CircularProgressIndicator(
+                            modifier = Modifier.size(24.dp),
+                            color = MaterialTheme.colorScheme.onPrimary
+                        )
+                    } else {
+                        Text("Checkout")
+                    }
+                }
+            }
         }
     }
     
@@ -326,17 +458,13 @@ fun ShoppingCartBottomSheet(
                         modifier = Modifier.fillMaxWidth(),
                         horizontalArrangement = Arrangement.spacedBy(8.dp)
                     ) {
-                        PaymentMethodButton(
-                            title = "Online Banking (FPX)",
-                            selected = selectedPaymentMethod == PaymentMethod.ONLINE_BANKING,
-                            onClick = { selectedPaymentMethod = PaymentMethod.ONLINE_BANKING }
-                        )
-                        
-                        PaymentMethodButton(
-                            title = "E-Wallet",
-                            selected = selectedPaymentMethod == PaymentMethod.E_WALLET,
-                            onClick = { selectedPaymentMethod = PaymentMethod.E_WALLET }
-                        )
+                        PaymentMethod.values().forEach { method ->
+                            FilterChip(
+                                selected = selectedPaymentMethod == method,
+                                onClick = { selectedPaymentMethod = method },
+                                label = { Text(method.name.replace("_", " ")) }
+                            )
+                        }
                     }
                 }
                 

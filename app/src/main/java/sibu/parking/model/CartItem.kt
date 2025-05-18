@@ -40,11 +40,6 @@ data class CartItem(
     }
 }
 
-/*enum class PaymentMethod {
-    ONLINE_BANKING,
-    E_WALLET
-}*/
-
 data class Cart(
     val items: MutableList<CartItem> = mutableListOf()
 ) {

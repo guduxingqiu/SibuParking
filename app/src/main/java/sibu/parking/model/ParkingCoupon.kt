@@ -41,14 +41,3 @@ data class ParkingArea(
     val name: String = "",
     val isFavorite: Boolean = false
 )
-
-/*data class CouponUsage(
-    val id: String = "",
-    val couponId: String = "",
-    val userId: String = "",
-    val usedCount: Int = 1,
-    val parkingArea: String = "",
-    val parkingLotNumber: String = "",
-    val vehicleNumber: String = "",
-    val timestamp: Long = System.currentTimeMillis()
-) */

@@ -556,20 +556,20 @@ class MainActivity : ComponentActivity() {
                     
                     // 显示加载到的优惠券详情
                     if (coupons.isEmpty()) {
-                        android.util.Log.d("MainActivity", "没有可用的优惠券")
-                        Toast.makeText(this@MainActivity, "您没有可用的优惠券", Toast.LENGTH_SHORT).show()
+                        android.util.Log.d("MainActivity", "No coupons available")
+                        Toast.makeText(this@MainActivity, "You have no available coupons", Toast.LENGTH_SHORT).show()
                     } else {
-                        android.util.Log.d("MainActivity", "优惠券列表:")
+                        android.util.Log.d("MainActivity", "Coupon List:")
                         coupons.forEachIndexed { index, coupon ->
                             android.util.Log.d("MainActivity", "[$index] ID: ${coupon.id}, 类型: ${coupon.type}, 剩余次数: ${coupon.remainingUses}")
                         }
                     }
                 }
             } catch (e: Exception) {
-                android.util.Log.e("MainActivity", "加载优惠券失败: ${e.message}")
+                android.util.Log.e("MainActivity", "Failed to load coupon: ${e.message}")
                 e.printStackTrace()
                 isLoadingCoupons = false
-                Toast.makeText(this@MainActivity, "加载优惠券失败: ${e.message}", Toast.LENGTH_SHORT).show()
+                Toast.makeText(this@MainActivity, "Failed to load coupon: ${e.message}", Toast.LENGTH_SHORT).show()
             }
         }
     }

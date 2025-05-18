@@ -18,6 +18,7 @@ import sibu.parking.model.ParkingCoupon
 import sibu.parking.model.PaymentMethod
 import sibu.parking.model.Vehicle
 import java.util.UUID
+import java.util.Calendar
 
 class FirebaseCouponService {
     private val auth: FirebaseAuth = FirebaseAuth.getInstance()
@@ -176,12 +177,29 @@ class FirebaseCouponService {
                 return Result.failure(Exception("Not enough remaining uses"))
             }
             
+            // 设置GMT+8时区
+            val timeZone = java.util.TimeZone.getTimeZone("Asia/Kuala_Lumpur")
+            val calendar = Calendar.getInstance(timeZone)
+            calendar.timeInMillis = startTime
+            
             // 计算过期时间
             val expirationTime = when (CouponType.valueOf(typeStr)) {
-                CouponType.MINUTES_30 -> startTime + (30 * 60 * 1000 * usedCount) // 30分钟
-                CouponType.HOUR_1 -> startTime + (60 * 60 * 1000 * usedCount) // 1小时
-                CouponType.HOURS_2 -> startTime + (2 * 60 * 60 * 1000 * usedCount) // 2小时
-                CouponType.HOURS_24 -> startTime + (24 * 60 * 60 * 1000 * usedCount) // 24小时
+                CouponType.MINUTES_30 -> {
+                    calendar.add(Calendar.MINUTE, 30 * usedCount)
+                    calendar.timeInMillis
+                }
+                CouponType.HOUR_1 -> {
+                    calendar.add(Calendar.HOUR, 1 * usedCount)
+                    calendar.timeInMillis
+                }
+                CouponType.HOURS_2 -> {
+                    calendar.add(Calendar.HOUR, 2 * usedCount)
+                    calendar.timeInMillis
+                }
+                CouponType.HOURS_24 -> {
+                    calendar.add(Calendar.HOUR, 24 * usedCount)
+                    calendar.timeInMillis
+                }
             }
             
             // 更新已使用次数和剩余次数
@@ -189,7 +207,13 @@ class FirebaseCouponService {
             val newRemainingUses = remainingUses - usedCount
             
             android.util.Log.d("FirebaseCouponService", "Updating coupon $couponId: usedCount to $newUsedCount, remainingUses to $newRemainingUses")
-            android.util.Log.d("FirebaseCouponService", "Start time: $startTime, Expiration time: $expirationTime")
+            
+            // 创建日期格式化器
+            val dateFormat = java.text.SimpleDateFormat("yyyy-MM-dd HH:mm:ss", java.util.Locale.getDefault())
+            dateFormat.timeZone = timeZone
+            
+            android.util.Log.d("FirebaseCouponService", "Start time (GMT+8): ${dateFormat.format(startTime)}")
+            android.util.Log.d("FirebaseCouponService", "Expiration time (GMT+8): ${dateFormat.format(expirationTime)}")
             
             // 更新Firestore文档
             firestore.collection("coupons").document(couponId)
