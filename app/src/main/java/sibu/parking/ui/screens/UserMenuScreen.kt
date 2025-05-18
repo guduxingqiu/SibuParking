@@ -2,6 +2,8 @@ package sibu.parking.ui.screens
 
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.text.KeyboardOptions
+import androidx.compose.foundation.verticalScroll
+import androidx.compose.foundation.rememberScrollState
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.*
 import androidx.compose.material3.*
@@ -16,21 +18,31 @@ import androidx.compose.ui.unit.dp
 import kotlinx.coroutines.Job
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
+import sibu.parking.model.Vehicle
+import sibu.parking.model.ParkingArea
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
 fun UserMenuScreen(
     username: String,
     email: String,
+    favoriteVehicles: List<Vehicle>,
+    favoriteParkingAreas: List<ParkingArea>,
     onBackClick: () -> Unit,
-    onUpdatePassword: (String, String, String) -> Unit,
+    onUpdatePassword: (currentPassword: String, newPassword: String, confirmPassword: String) -> Unit,
     onSignOut: () -> Unit,
-    onUpdateUsername: (String) -> Unit,
-    checkUsernameExists: suspend (String) -> Boolean = { false }
+    onUpdateUsername: (newUsername: String) -> Unit,
+    onAddFavoriteVehicle: (licensePlate: String) -> Unit,
+    onRemoveFavoriteVehicle: (vehicleId: String) -> Unit,
+    onAddFavoriteParkingArea: (areaName: String) -> Unit,
+    onRemoveFavoriteParkingArea: (areaId: String) -> Unit,
+    checkUsernameExists: suspend (username: String) -> Boolean
 ) {
-    var showPasswordDialog by remember { mutableStateOf(false) }
+    var showUpdatePasswordDialog by remember { mutableStateOf(false) }
+    var showUpdateUsernameDialog by remember { mutableStateOf(false) }
     var showSignOutDialog by remember { mutableStateOf(false) }
-    var showUsernameDialog by remember { mutableStateOf(false) }
+    var showAddVehicleDialog by remember { mutableStateOf(false) }
+    var showAddParkingAreaDialog by remember { mutableStateOf(false) }
     
     // Username verification status
     var isCheckingUsername by remember { mutableStateOf(false) }
@@ -42,7 +54,7 @@ fun UserMenuScreen(
     
     // Debounced username check
     fun checkUsername(input: String) {
-        if (input.length >= 3) {
+        if (input.length < 1) {
             isUsernameAvailable = null
             return
         }
@@ -95,68 +107,291 @@ fun UserMenuScreen(
             modifier = Modifier
                 .fillMaxSize()
                 .padding(paddingValues)
-                .padding(16.dp),
-            verticalArrangement = Arrangement.spacedBy(16.dp)
         ) {
-            // User Info Section
-            Card(
-                modifier = Modifier.fillMaxWidth()
+            // Wrap the content in a scrollable column
+            Column(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .verticalScroll(rememberScrollState())
+                    .padding(16.dp),
+                verticalArrangement = Arrangement.spacedBy(16.dp)
             ) {
-                Column(
-                    modifier = Modifier
-                        .fillMaxWidth()
-                        .padding(16.dp)
+                // User Info Section
+                Card(
+                    modifier = Modifier.fillMaxWidth()
                 ) {
-                    Text(
-                        text = "User Information",
-                        style = MaterialTheme.typography.titleMedium
-                    )
-                    Spacer(modifier = Modifier.height(8.dp))
-                    Text("Username: $username")
-                    Text("Email: $email")
+                    Column(
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .padding(16.dp)
+                    ) {
+                        Text(
+                            text = "User Information",
+                            style = MaterialTheme.typography.titleMedium
+                        )
+                        Spacer(modifier = Modifier.height(8.dp))
+                        Text("Username: $username")
+                        Text("Email: $email")
+                    }
                 }
-            }
-            
-            // Change Username Button
-            Button(
-                onClick = { showUsernameDialog = true },
-                modifier = Modifier.fillMaxWidth()
-            ) {
-                Icon(Icons.Default.Edit, contentDescription = null)
-                Spacer(modifier = Modifier.width(8.dp))
-                Text("Change Username")
-            }
-            
-            // Change Password Button
-            Button(
-                onClick = { showPasswordDialog = true },
-                modifier = Modifier.fillMaxWidth()
-            ) {
-                Icon(Icons.Default.Edit, contentDescription = null)
-                Spacer(modifier = Modifier.width(8.dp))
-                Text("Change Password")
-            }
-            
-            // Sign Out Button
-            Button(
-                onClick = { showSignOutDialog = true },
-                modifier = Modifier.fillMaxWidth(),
-                colors = ButtonDefaults.buttonColors(
-                    containerColor = MaterialTheme.colorScheme.error
-                )
-            ) {
-                Text("Sign Out")
+                
+                // Favorite Vehicles Section
+                Card(
+                    modifier = Modifier.fillMaxWidth()
+                ) {
+                    Column(
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .padding(16.dp)
+                    ) {
+                        Row(
+                            modifier = Modifier.fillMaxWidth(),
+                            horizontalArrangement = Arrangement.SpaceBetween,
+                            verticalAlignment = Alignment.CenterVertically
+                        ) {
+                            Text(
+                                text = "Favorite Vehicles",
+                                style = MaterialTheme.typography.titleMedium
+                            )
+                            IconButton(onClick = { showAddVehicleDialog = true }) {
+                                Icon(Icons.Default.Add, contentDescription = "Add Vehicle")
+                            }
+                        }
+                        Spacer(modifier = Modifier.height(8.dp))
+                        if (favoriteVehicles.isEmpty()) {
+                            Text("No favorite vehicles added yet")
+                        } else {
+                            favoriteVehicles.forEach { vehicle ->
+                                Row(
+                                    modifier = Modifier.fillMaxWidth(),
+                                    horizontalArrangement = Arrangement.SpaceBetween,
+                                    verticalAlignment = Alignment.CenterVertically
+                                ) {
+                                    Text("• ${vehicle.licensePlate}")
+                                    IconButton(
+                                        onClick = { onRemoveFavoriteVehicle(vehicle.id) }
+                                    ) {
+                                        Icon(Icons.Default.Delete, contentDescription = "Remove Vehicle")
+                                    }
+                                }
+                            }
+                        }
+                    }
+                }
+                
+                // Favorite Parking Areas Section
+                Card(
+                    modifier = Modifier.fillMaxWidth()
+                ) {
+                    Column(
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .padding(16.dp)
+                    ) {
+                        Row(
+                            modifier = Modifier.fillMaxWidth(),
+                            horizontalArrangement = Arrangement.SpaceBetween,
+                            verticalAlignment = Alignment.CenterVertically
+                        ) {
+                            Text(
+                                text = "Favorite Parking Areas",
+                                style = MaterialTheme.typography.titleMedium
+                            )
+                            IconButton(onClick = { showAddParkingAreaDialog = true }) {
+                                Icon(Icons.Default.Add, contentDescription = "Add Parking Area")
+                            }
+                        }
+                        Spacer(modifier = Modifier.height(8.dp))
+                        if (favoriteParkingAreas.isEmpty()) {
+                            Text("No favorite parking areas added yet")
+                        } else {
+                            favoriteParkingAreas.forEach { area ->
+                                Row(
+                                    modifier = Modifier.fillMaxWidth(),
+                                    horizontalArrangement = Arrangement.SpaceBetween,
+                                    verticalAlignment = Alignment.CenterVertically
+                                ) {
+                                    Text("• ${area.name}")
+                                    IconButton(
+                                        onClick = { onRemoveFavoriteParkingArea(area.id) }
+                                    ) {
+                                        Icon(Icons.Default.Delete, contentDescription = "Remove Parking Area")
+                                    }
+                                }
+                            }
+                        }
+                    }
+                }
+                
+                // Update Username Button
+                Button(
+                    onClick = { showUpdateUsernameDialog = true },
+                    modifier = Modifier.fillMaxWidth()
+                ) {
+                    Icon(Icons.Default.Person, contentDescription = null)
+                    Spacer(modifier = Modifier.width(8.dp))
+                    Text("Update Username")
+                }
+                
+                // Update Password Button
+                Button(
+                    onClick = { showUpdatePasswordDialog = true },
+                    modifier = Modifier.fillMaxWidth()
+                ) {
+                    Icon(Icons.Default.Lock, contentDescription = null)
+                    Spacer(modifier = Modifier.width(8.dp))
+                    Text("Update Password")
+                }
+                
+                // Sign Out Button
+                Button(
+                    onClick = { showSignOutDialog = true },
+                    modifier = Modifier.fillMaxWidth()
+                ) {
+                    Icon(Icons.Default.ExitToApp, contentDescription = null)
+                    Spacer(modifier = Modifier.width(8.dp))
+                    Text("Sign Out")
+                }
             }
         }
     }
     
-    // Username Update Dialog
-    if (showUsernameDialog) {
+    // Add Vehicle Dialog
+    if (showAddVehicleDialog) {
+        var licensePlate by remember { mutableStateOf("") }
+        
+        AlertDialog(
+            onDismissRequest = { showAddVehicleDialog = false },
+            title = { Text("Add Favorite Vehicle") },
+            text = {
+                Column {
+                    OutlinedTextField(
+                        value = licensePlate,
+                        onValueChange = { licensePlate = it },
+                        label = { Text("License Plate") },
+                        singleLine = true,
+                        modifier = Modifier.fillMaxWidth()
+                    )
+                }
+            },
+            confirmButton = {
+                TextButton(
+                    onClick = {
+                        if (licensePlate.isNotBlank()) {
+                            onAddFavoriteVehicle(licensePlate)
+                            showAddVehicleDialog = false
+                        }
+                    }
+                ) {
+                    Text("Add")
+                }
+            },
+            dismissButton = {
+                TextButton(onClick = { showAddVehicleDialog = false }) {
+                    Text("Cancel")
+                }
+            }
+        )
+    }
+    
+    // Add Parking Area Dialog
+    if (showAddParkingAreaDialog) {
+        var areaName by remember { mutableStateOf("") }
+        
+        AlertDialog(
+            onDismissRequest = { showAddParkingAreaDialog = false },
+            title = { Text("Add Favorite Parking Area") },
+            text = {
+                Column {
+                    OutlinedTextField(
+                        value = areaName,
+                        onValueChange = { areaName = it },
+                        label = { Text("Area Name") },
+                        singleLine = true,
+                        modifier = Modifier.fillMaxWidth()
+                    )
+                }
+            },
+            confirmButton = {
+                TextButton(
+                    onClick = {
+                        if (areaName.isNotBlank()) {
+                            onAddFavoriteParkingArea(areaName)
+                            showAddParkingAreaDialog = false
+                        }
+                    }
+                ) {
+                    Text("Add")
+                }
+            },
+            dismissButton = {
+                TextButton(onClick = { showAddParkingAreaDialog = false }) {
+                    Text("Cancel")
+                }
+            }
+        )
+    }
+    
+    // Update Password Dialog
+    if (showUpdatePasswordDialog) {
+        var currentPassword by remember { mutableStateOf("") }
+        var newPassword by remember { mutableStateOf("") }
+        var confirmPassword by remember { mutableStateOf("") }
+        
+        AlertDialog(
+            onDismissRequest = { showUpdatePasswordDialog = false },
+            title = { Text("Update Password") },
+            text = {
+                Column {
+                    OutlinedTextField(
+                        value = currentPassword,
+                        onValueChange = { currentPassword = it },
+                        label = { Text("Current Password") },
+                        modifier = Modifier.fillMaxWidth()
+                    )
+                    Spacer(modifier = Modifier.height(8.dp))
+                    OutlinedTextField(
+                        value = newPassword,
+                        onValueChange = { newPassword = it },
+                        label = { Text("New Password") },
+                        modifier = Modifier.fillMaxWidth()
+                    )
+                    Spacer(modifier = Modifier.height(8.dp))
+                    OutlinedTextField(
+                        value = confirmPassword,
+                        onValueChange = { confirmPassword = it },
+                        label = { Text("Confirm New Password") },
+                        modifier = Modifier.fillMaxWidth()
+                    )
+                }
+            },
+            confirmButton = {
+                TextButton(
+                    onClick = {
+                        if (newPassword == confirmPassword) {
+                            onUpdatePassword(currentPassword, newPassword, confirmPassword)
+                            showUpdatePasswordDialog = false
+                        }
+                    }
+                ) {
+                    Text("Update")
+                }
+            },
+            dismissButton = {
+                TextButton(onClick = { showUpdatePasswordDialog = false }) {
+                    Text("Cancel")
+                }
+            }
+        )
+    }
+    
+    // Update Username Dialog
+    if (showUpdateUsernameDialog) {
         var newUsername by remember { mutableStateOf("") }
         
         AlertDialog(
-            onDismissRequest = { showUsernameDialog = false },
-            title = { Text("Change Username") },
+            onDismissRequest = { showUpdateUsernameDialog = false },
+            title = { Text("Update Username") },
             text = {
                 Column {
                     OutlinedTextField(
@@ -206,19 +441,10 @@ fun UserMenuScreen(
             confirmButton = {
                 TextButton(
                     onClick = {
-                        var isValid = true
-                        if (newUsername.isEmpty()) {
-                            usernameError = "Username cannot be empty"
-                            isValid = false
-                            return@TextButton
+                        if (validateForm()) {
+                            onUpdateUsername(newUsername)
+                            showUpdateUsernameDialog = false
                         }
-                        if (isUsernameAvailable == false) {
-                            usernameError = "Username already exists"
-                            isValid = false
-                            return@TextButton
-                        }
-                        onUpdateUsername(newUsername)
-                        showUsernameDialog = false
                     },
                     enabled = !isCheckingUsername && isUsernameAvailable == true
                 ) {
@@ -227,114 +453,9 @@ fun UserMenuScreen(
             },
             dismissButton = {
                 TextButton(
-                    onClick = { showUsernameDialog = false },
+                    onClick = { showUpdateUsernameDialog = false },
                     enabled = !isCheckingUsername
                 ) {
-                    Text("Cancel")
-                }
-            }
-        )
-    }
-    
-    // Password Update Dialog
-    if (showPasswordDialog) {
-        var currentPassword by remember { mutableStateOf("") }
-        var newPassword by remember { mutableStateOf("") }
-        var confirmPassword by remember { mutableStateOf("") }
-        var error by remember { mutableStateOf<String?>(null) }
-        
-        var showCurrentPassword by remember { mutableStateOf(false) }
-        var showNewPassword by remember { mutableStateOf(false) }
-        var showConfirmPassword by remember { mutableStateOf(false) }
-        
-        AlertDialog(
-            onDismissRequest = { showPasswordDialog = false },
-            title = { Text("Change Password") },
-            text = {
-                Column(
-                    verticalArrangement = Arrangement.spacedBy(8.dp)
-                ) {
-                    OutlinedTextField(
-                        value = currentPassword,
-                        onValueChange = { 
-                            currentPassword = it
-                            error = null
-                        },
-                        label = { Text("Current Password") },
-                        visualTransformation = if (showCurrentPassword) VisualTransformation.None else PasswordVisualTransformation(),
-                        keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Password),
-                        trailingIcon = {
-                            IconButton(onClick = { showCurrentPassword = !showCurrentPassword }) {
-                                Icon(
-                                    if (showCurrentPassword) Icons.Default.VisibilityOff else Icons.Default.Visibility,
-                                    contentDescription = if (showCurrentPassword) "Hide password" else "Show password"
-                                )
-                            }
-                        }
-                    )
-                    OutlinedTextField(
-                        value = newPassword,
-                        onValueChange = { 
-                            newPassword = it
-                            error = null
-                        },
-                        label = { Text("New Password") },
-                        visualTransformation = if (showNewPassword) VisualTransformation.None else PasswordVisualTransformation(),
-                        keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Password),
-                        trailingIcon = {
-                            IconButton(onClick = { showNewPassword = !showNewPassword }) {
-                                Icon(
-                                    if (showNewPassword) Icons.Default.VisibilityOff else Icons.Default.Visibility,
-                                    contentDescription = if (showNewPassword) "Hide password" else "Show password"
-                                )
-                            }
-                        }
-                    )
-                    OutlinedTextField(
-                        value = confirmPassword,
-                        onValueChange = { 
-                            confirmPassword = it
-                            error = null
-                        },
-                        label = { Text("Confirm New Password") },
-                        visualTransformation = if (showConfirmPassword) VisualTransformation.None else PasswordVisualTransformation(),
-                        keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Password),
-                        trailingIcon = {
-                            IconButton(onClick = { showConfirmPassword = !showConfirmPassword }) {
-                                Icon(
-                                    if (showConfirmPassword) Icons.Default.VisibilityOff else Icons.Default.Visibility,
-                                    contentDescription = if (showConfirmPassword) "Hide password" else "Show password"
-                                )
-                            }
-                        }
-                    )
-                    error?.let { Text(it, color = MaterialTheme.colorScheme.error) }
-                }
-            },
-            confirmButton = {
-                TextButton(
-                    onClick = {
-                        if (currentPassword.isBlank()) {
-                            error = "Please enter current password"
-                            return@TextButton
-                        }
-                        if (newPassword.isBlank()) {
-                            error = "Please enter new password"
-                            return@TextButton
-                        }
-                        if (newPassword != confirmPassword) {
-                            error = "Passwords do not match"
-                            return@TextButton
-                        }
-                        onUpdatePassword(currentPassword, newPassword, confirmPassword)
-                        showPasswordDialog = false
-                    }
-                ) {
-                    Text("Update")
-                }
-            },
-            dismissButton = {
-                TextButton(onClick = { showPasswordDialog = false }) {
                     Text("Cancel")
                 }
             }

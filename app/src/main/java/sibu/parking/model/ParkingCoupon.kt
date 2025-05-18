@@ -37,6 +37,7 @@ data class Vehicle(
 
 data class ParkingArea(
     val id: String = "",
+    val userId: String = "",
     val name: String = "",
     val isFavorite: Boolean = false
 )

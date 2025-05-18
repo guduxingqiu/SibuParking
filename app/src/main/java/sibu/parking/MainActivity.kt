@@ -396,6 +396,8 @@ class MainActivity : ComponentActivity() {
                             UserMenuScreen(
                                 username = currentUser?.username ?: "",
                                 email = currentUser?.email ?: "",
+                                favoriteVehicles = favoriteVehicles,
+                                favoriteParkingAreas = favoriteParkingAreas,
                                 onBackClick = {
                                     currentScreen = AppScreen.USER_HOME
                                 },
@@ -409,6 +411,46 @@ class MainActivity : ComponentActivity() {
                                 },
                                 onUpdateUsername = { newUsername ->
                                     updateUsername(newUsername)
+                                },
+                                onAddFavoriteVehicle = { licensePlate ->
+                                    lifecycleScope.launch {
+                                        try {
+                                            couponService.addFavoriteVehicle(licensePlate)
+                                            Toast.makeText(this@MainActivity, "Vehicle added to favorites", Toast.LENGTH_SHORT).show()
+                                        } catch (e: Exception) {
+                                            Toast.makeText(this@MainActivity, "Failed to add vehicle: ${e.message}", Toast.LENGTH_SHORT).show()
+                                        }
+                                    }
+                                },
+                                onRemoveFavoriteVehicle = { vehicleId ->
+                                    lifecycleScope.launch {
+                                        try {
+                                            couponService.removeFavoriteVehicle(vehicleId)
+                                            Toast.makeText(this@MainActivity, "Vehicle removed from favorites", Toast.LENGTH_SHORT).show()
+                                        } catch (e: Exception) {
+                                            Toast.makeText(this@MainActivity, "Failed to remove vehicle: ${e.message}", Toast.LENGTH_SHORT).show()
+                                        }
+                                    }
+                                },
+                                onAddFavoriteParkingArea = { areaName ->
+                                    lifecycleScope.launch {
+                                        try {
+                                            couponService.addFavoriteParkingArea(areaName)
+                                            Toast.makeText(this@MainActivity, "Parking area added to favorites", Toast.LENGTH_SHORT).show()
+                                        } catch (e: Exception) {
+                                            Toast.makeText(this@MainActivity, "Failed to add parking area: ${e.message}", Toast.LENGTH_SHORT).show()
+                                        }
+                                    }
+                                },
+                                onRemoveFavoriteParkingArea = { areaId ->
+                                    lifecycleScope.launch {
+                                        try {
+                                            couponService.removeFavoriteParkingArea(areaId)
+                                            Toast.makeText(this@MainActivity, "Parking area removed from favorites", Toast.LENGTH_SHORT).show()
+                                        } catch (e: Exception) {
+                                            Toast.makeText(this@MainActivity, "Failed to remove parking area: ${e.message}", Toast.LENGTH_SHORT).show()
+                                        }
+                                    }
                                 },
                                 checkUsernameExists = { username ->
                                     !authService.isUsernameUnique(username)

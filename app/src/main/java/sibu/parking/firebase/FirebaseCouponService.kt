@@ -4,6 +4,8 @@ import com.google.firebase.auth.FirebaseAuth
 import com.google.firebase.firestore.FirebaseFirestore
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.flow
+import kotlinx.coroutines.flow.callbackFlow
+import kotlinx.coroutines.channels.awaitClose
 import kotlinx.coroutines.tasks.await
 import sibu.parking.model.User
 import sibu.parking.model.Cart
@@ -265,45 +267,142 @@ class FirebaseCouponService {
         }
     }
     
-    // Get user's favorite vehicles
-    suspend fun getFavoriteVehicles(): Flow<List<Vehicle>> = flow {
-        try {
-            val userId = auth.currentUser?.uid ?: return@flow
+    // Favorite Vehicles
+    suspend fun addFavoriteVehicle(licensePlate: String): Result<Vehicle> {
+        return try {
+            val currentUser = auth.currentUser ?: return Result.failure(Exception("User not logged in"))
             
-            val snapshot = firestore.collection("vehicles")
-                .whereEqualTo("userId", userId)
-                .whereEqualTo("isFavorite", true)
-                .get()
+            val vehicle = Vehicle(
+                id = UUID.randomUUID().toString(),
+                licensePlate = licensePlate,
+                userId = currentUser.uid
+            )
+            
+            firestore.collection("favoriteVehicles")
+                .document(vehicle.id)
+                .set(vehicle)
                 .await()
-                
-            val vehicles = snapshot.documents.mapNotNull { doc ->
-                doc.toObject(Vehicle::class.java)
-            }
             
-            emit(vehicles)
+            Result.success(vehicle)
         } catch (e: Exception) {
-            emit(emptyList())
+            Result.failure(e)
         }
     }
     
-    // Get user's favorite parking areas
-    suspend fun getFavoriteParkingAreas(): Flow<List<ParkingArea>> = flow {
-        try {
-            val userId = auth.currentUser?.uid ?: return@flow
+    suspend fun removeFavoriteVehicle(vehicleId: String): Result<Unit> {
+        return try {
+            val currentUser = auth.currentUser ?: return Result.failure(Exception("User not logged in"))
             
-            val snapshot = firestore.collection("parkingAreas")
-                .whereEqualTo("isFavorite", true)
+            // Verify the vehicle belongs to the current user
+            val vehicleDoc = firestore.collection("favoriteVehicles")
+                .document(vehicleId)
                 .get()
                 .await()
-                
-            val areas = snapshot.documents.mapNotNull { doc ->
-                doc.toObject(ParkingArea::class.java)
+            
+            val vehicle = vehicleDoc.toObject(Vehicle::class.java)
+            if (vehicle?.userId != currentUser.uid) {
+                return Result.failure(Exception("Unauthorized"))
             }
             
-            emit(areas)
+            firestore.collection("favoriteVehicles")
+                .document(vehicleId)
+                .delete()
+                .await()
+            
+            Result.success(Unit)
         } catch (e: Exception) {
-            emit(emptyList())
+            Result.failure(e)
         }
+    }
+    
+    fun getFavoriteVehicles(): Flow<List<Vehicle>> = callbackFlow {
+        val currentUser = auth.currentUser ?: throw Exception("User not logged in")
+        
+        val listener = firestore.collection("favoriteVehicles")
+            .whereEqualTo("userId", currentUser.uid)
+            .addSnapshotListener { snapshot, error ->
+                if (error != null) {
+                    close(error)
+                    return@addSnapshotListener
+                }
+                
+                val vehicles = snapshot?.documents?.mapNotNull { doc ->
+                    doc.toObject(Vehicle::class.java)
+                } ?: emptyList()
+                
+                trySend(vehicles)
+            }
+        
+        awaitClose { listener.remove() }
+    }
+    
+    // Favorite Parking Areas
+    suspend fun addFavoriteParkingArea(areaName: String): Result<ParkingArea> {
+        return try {
+            val currentUser = auth.currentUser ?: return Result.failure(Exception("User not logged in"))
+            
+            val area = ParkingArea(
+                id = UUID.randomUUID().toString(),
+                name = areaName,
+                userId = currentUser.uid
+            )
+            
+            firestore.collection("favoriteParkingAreas")
+                .document(area.id)
+                .set(area)
+                .await()
+            
+            Result.success(area)
+        } catch (e: Exception) {
+            Result.failure(e)
+        }
+    }
+    
+    suspend fun removeFavoriteParkingArea(areaId: String): Result<Unit> {
+        return try {
+            val currentUser = auth.currentUser ?: return Result.failure(Exception("User not logged in"))
+            
+            // Verify the area belongs to the current user
+            val areaDoc = firestore.collection("favoriteParkingAreas")
+                .document(areaId)
+                .get()
+                .await()
+            
+            val area = areaDoc.toObject(ParkingArea::class.java)
+            if (area?.userId != currentUser.uid) {
+                return Result.failure(Exception("Unauthorized"))
+            }
+            
+            firestore.collection("favoriteParkingAreas")
+                .document(areaId)
+                .delete()
+                .await()
+            
+            Result.success(Unit)
+        } catch (e: Exception) {
+            Result.failure(e)
+        }
+    }
+    
+    fun getFavoriteParkingAreas(): Flow<List<ParkingArea>> = callbackFlow {
+        val currentUser = auth.currentUser ?: throw Exception("User not logged in")
+        
+        val listener = firestore.collection("favoriteParkingAreas")
+            .whereEqualTo("userId", currentUser.uid)
+            .addSnapshotListener { snapshot, error ->
+                if (error != null) {
+                    close(error)
+                    return@addSnapshotListener
+                }
+                
+                val areas = snapshot?.documents?.mapNotNull { doc ->
+                    doc.toObject(ParkingArea::class.java)
+                } ?: emptyList()
+                
+                trySend(areas)
+            }
+        
+        awaitClose { listener.remove() }
     }
     
     // Add a vehicle
