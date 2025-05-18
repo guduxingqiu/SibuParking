@@ -16,6 +16,7 @@ import androidx.compose.ui.unit.dp
 import sibu.parking.model.ParkingArea
 import sibu.parking.model.ParkingCoupon
 import sibu.parking.model.Vehicle
+import java.util.*
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
@@ -23,9 +24,9 @@ fun UseCouponScreen(
     coupons: List<ParkingCoupon>,
     favoriteVehicles: List<Vehicle>,
     favoriteParkingAreas: List<ParkingArea>,
-    onUseCoupon: (couponId: String, usedCount: Int, parkingArea: String, parkingLotNumber: String, vehicleNumber: String) -> Unit,
+    isLoading: Boolean,
     onBackClick: () -> Unit,
-    isLoading: Boolean = false
+    onUseCoupon: (couponId: String, usedCount: Int, parkingArea: String, parkingLotNumber: String, vehicleNumber: String, startTime: Long) -> Unit
 ) {
     // 添加调试日志
     LaunchedEffect(coupons) {
@@ -35,14 +36,15 @@ fun UseCouponScreen(
         }
     }
     
+    var showUseDialog by remember { mutableStateOf(false) }
     var selectedCoupon by remember { mutableStateOf<ParkingCoupon?>(null) }
-    
-    // Dialog state
-    var showDialog by remember { mutableStateOf(false) }
     var usedCount by remember { mutableStateOf("1") }
     var parkingArea by remember { mutableStateOf("") }
     var parkingLotNumber by remember { mutableStateOf("") }
     var vehicleNumber by remember { mutableStateOf("") }
+    var useCurrentTime by remember { mutableStateOf(true) }
+    var customTime by remember { mutableStateOf("") }
+    var timeError by remember { mutableStateOf<String?>(null) }
     
     // Dropdown menu state
     var showVehicleDropdown by remember { mutableStateOf(false) }
@@ -64,6 +66,9 @@ fun UseCouponScreen(
         parkingAreaError = null
         parkingLotNumberError = null
         vehicleNumberError = null
+        useCurrentTime = true
+        customTime = ""
+        timeError = null
     }
     
     // Validate form
@@ -109,6 +114,38 @@ fun UseCouponScreen(
             isValid = false
         } else {
             vehicleNumberError = null
+        }
+        
+        // Validate custom time
+        if (!useCurrentTime) {
+            try {
+                if (customTime.length != 4) {
+                    timeError = "Time must be in HHmm format"
+                    isValid = false
+                } else {
+                    val hours = customTime.take(2).toInt()
+                    val minutes = customTime.takeLast(2).toInt()
+                    
+                    if (hours < 0 || hours > 23 || minutes < 0 || minutes > 59) {
+                        timeError = "Invalid time format"
+                        isValid = false
+                    } else {
+                        val calendar = Calendar.getInstance()
+                        val currentHour = calendar.get(Calendar.HOUR_OF_DAY)
+                        val currentMinute = calendar.get(Calendar.MINUTE)
+                        
+                        if (hours < currentHour || (hours == currentHour && minutes < currentMinute)) {
+                            timeError = "Time cannot be earlier than current time"
+                            isValid = false
+                        } else {
+                            timeError = null
+                        }
+                    }
+                }
+            } catch (e: Exception) {
+                timeError = "Invalid time format"
+                isValid = false
+            }
         }
         
         return isValid
@@ -181,7 +218,7 @@ fun UseCouponScreen(
                             onClick = {
                                 android.util.Log.d("UseCouponScreen", "点击优惠券: ${coupon.id}, 类型: ${coupon.type}")
                                 selectedCoupon = coupon
-                                showDialog = true
+                                showUseDialog = true
                                 resetDialogFields()
                             }
                         )
@@ -193,186 +230,153 @@ fun UseCouponScreen(
     }
     
     // Use Coupon Dialog
-    if (showDialog && selectedCoupon != null) {
+    if (showUseDialog && selectedCoupon != null) {
         AlertDialog(
-            onDismissRequest = { 
-                showDialog = false
-                resetDialogFields()
-            },
-            title = { Text("Use ${selectedCoupon!!.getDisplayName()}") },
+            onDismissRequest = { showUseDialog = false },
+            title = { Text("Use Coupon") },
             text = {
-                Column(
-                    modifier = Modifier.fillMaxWidth()
-                ) {
-                    // Display coupon info
-                    Card(
-                        modifier = Modifier
-                            .fillMaxWidth()
-                            .padding(bottom = 16.dp)
-                    ) {
-                        Column(
-                            modifier = Modifier
-                                .fillMaxWidth()
-                                .padding(8.dp)
-                        ) {
-                            Text(
-                                text = "Coupon ID: ${selectedCoupon!!.id.take(8)}...",
-                                style = MaterialTheme.typography.bodySmall
-                            )
-                            Text(
-                                text = "Remaining Uses: ${selectedCoupon!!.remainingUses}",
-                                style = MaterialTheme.typography.bodyMedium
-                            )
-                        }
-                    }
-                    
-                    // Used Count
+                Column {
                     OutlinedTextField(
                         value = usedCount,
-                        onValueChange = { 
-                            usedCount = it
-                            usedCountError = null
-                        },
+                        onValueChange = { usedCount = it },
                         label = { Text("Number of Uses") },
-                        singleLine = true,
-                        isError = usedCountError != null,
-                        supportingText = { usedCountError?.let { Text(it) } },
                         keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Number),
-                        modifier = Modifier
-                            .fillMaxWidth()
-                            .padding(bottom = 8.dp)
-                    )
-                    
-                    // Parking Area with dropdown
-                    Box(
                         modifier = Modifier.fillMaxWidth()
-                    ) {
-                        OutlinedTextField(
-                            value = parkingArea,
-                            onValueChange = { 
-                                parkingArea = it
-                                parkingAreaError = null
-                            },
-                            label = { Text("Parking Area") },
-                            singleLine = true,
-                            isError = parkingAreaError != null,
-                            supportingText = { parkingAreaError?.let { Text(it) } },
-                            modifier = Modifier
-                                .fillMaxWidth()
-                                .padding(bottom = 8.dp),
-                            trailingIcon = {
-                                if (favoriteParkingAreas.isNotEmpty()) {
-                                    IconButton(onClick = { showAreaDropdown = true }) {
-                                        Icon(Icons.Default.ArrowDropDown, contentDescription = "Select Parking Area")
-                                    }
-                                }
+                    )
+                    Spacer(modifier = Modifier.height(8.dp))
+                    OutlinedTextField(
+                        value = parkingArea,
+                        onValueChange = { parkingArea = it },
+                        label = { Text("Parking Area") },
+                        modifier = Modifier.fillMaxWidth(),
+                        trailingIcon = {
+                            IconButton(onClick = { showAreaDropdown = true }) {
+                                Icon(Icons.Default.ArrowDropDown, contentDescription = "Select Area")
                             }
-                        )
-                        
+                        }
+                    )
+                    if (showAreaDropdown) {
                         DropdownMenu(
                             expanded = showAreaDropdown,
-                            onDismissRequest = { showAreaDropdown = false }
+                            onDismissRequest = { showAreaDropdown = false },
+                            modifier = Modifier.fillMaxWidth()
                         ) {
                             favoriteParkingAreas.forEach { area ->
                                 DropdownMenuItem(
                                     text = { Text(area.name) },
                                     onClick = {
                                         parkingArea = area.name
-                                        parkingAreaError = null
                                         showAreaDropdown = false
                                     }
                                 )
                             }
                         }
                     }
-                    
-                    // Parking Lot Number
+                    Spacer(modifier = Modifier.height(8.dp))
                     OutlinedTextField(
                         value = parkingLotNumber,
-                        onValueChange = { 
-                            parkingLotNumber = it
-                            parkingLotNumberError = null
-                        },
+                        onValueChange = { parkingLotNumber = it },
                         label = { Text("Parking Lot Number") },
-                        singleLine = true,
-                        isError = parkingLotNumberError != null,
-                        supportingText = { parkingLotNumberError?.let { Text(it) } },
-                        modifier = Modifier
-                            .fillMaxWidth()
-                            .padding(bottom = 8.dp)
-                    )
-                    
-                    // Vehicle Number with dropdown
-                    Box(
                         modifier = Modifier.fillMaxWidth()
-                    ) {
-                        OutlinedTextField(
-                            value = vehicleNumber,
-                            onValueChange = { 
-                                vehicleNumber = it
-                                vehicleNumberError = null
-                            },
-                            label = { Text("Vehicle Number") },
-                            singleLine = true,
-                            isError = vehicleNumberError != null,
-                            supportingText = { vehicleNumberError?.let { Text(it) } },
-                            modifier = Modifier
-                                .fillMaxWidth()
-                                .padding(bottom = 8.dp),
-                            trailingIcon = {
-                                if (favoriteVehicles.isNotEmpty()) {
-                                    IconButton(onClick = { showVehicleDropdown = true }) {
-                                        Icon(Icons.Default.ArrowDropDown, contentDescription = "Select Vehicle")
-                                    }
-                                }
+                    )
+                    Spacer(modifier = Modifier.height(8.dp))
+                    OutlinedTextField(
+                        value = vehicleNumber,
+                        onValueChange = { vehicleNumber = it },
+                        label = { Text("Vehicle Number") },
+                        modifier = Modifier.fillMaxWidth(),
+                        trailingIcon = {
+                            IconButton(onClick = { showVehicleDropdown = true }) {
+                                Icon(Icons.Default.ArrowDropDown, contentDescription = "Select Vehicle")
                             }
-                        )
-                        
+                        }
+                    )
+                    if (showVehicleDropdown) {
                         DropdownMenu(
                             expanded = showVehicleDropdown,
-                            onDismissRequest = { showVehicleDropdown = false }
+                            onDismissRequest = { showVehicleDropdown = false },
+                            modifier = Modifier.fillMaxWidth()
                         ) {
                             favoriteVehicles.forEach { vehicle ->
                                 DropdownMenuItem(
                                     text = { Text(vehicle.licensePlate) },
                                     onClick = {
                                         vehicleNumber = vehicle.licensePlate
-                                        vehicleNumberError = null
                                         showVehicleDropdown = false
                                     }
                                 )
                             }
                         }
                     }
+                    
+                    // Time selection section
+                    Row(
+                        modifier = Modifier.fillMaxWidth(),
+                        verticalAlignment = Alignment.CenterVertically
+                    ) {
+                        Text("Use Current Time")
+                        Spacer(modifier = Modifier.width(8.dp))
+                        Switch(
+                            checked = useCurrentTime,
+                            onCheckedChange = { useCurrentTime = it }
+                        )
+                    }
+                    
+                    if (!useCurrentTime) {
+                        Spacer(modifier = Modifier.height(8.dp))
+                        OutlinedTextField(
+                            value = customTime,
+                            onValueChange = { 
+                                if (it.length <= 4 && it.all { char -> char.isDigit() }) {
+                                    customTime = it
+                                    timeError = null
+                                }
+                            },
+                            label = { Text("Custom Time (HHmm)") },
+                            placeholder = { Text("e.g., 0800 or 1530") },
+                            keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Number),
+                            modifier = Modifier.fillMaxWidth(),
+                            isError = timeError != null,
+                            supportingText = {
+                                if (timeError != null) {
+                                    Text(timeError!!)
+                                }
+                            }
+                        )
+                    }
                 }
             },
             confirmButton = {
-                Button(
+                TextButton(
                     onClick = {
                         if (validateForm()) {
-                            android.util.Log.d("UseCouponScreen", "使用优惠券: ${selectedCoupon!!.id}, 使用次数: $usedCount")
-                            onUseCoupon(
-                                selectedCoupon!!.id,
-                                usedCount.toInt(),
-                                parkingArea,
-                                parkingLotNumber,
-                                vehicleNumber
-                            )
-                            showDialog = false
-                            resetDialogFields()
+                            val count = usedCount.toIntOrNull() ?: 1
+                            val startTime = if (useCurrentTime) {
+                                System.currentTimeMillis()
+                            } else {
+                                try {
+                                    val hours = customTime.take(2).toInt()
+                                    val minutes = customTime.takeLast(2).toInt()
+                                    val calendar = Calendar.getInstance()
+                                    calendar.set(Calendar.HOUR_OF_DAY, hours)
+                                    calendar.set(Calendar.MINUTE, minutes)
+                                    calendar.set(Calendar.SECOND, 0)
+                                    calendar.set(Calendar.MILLISECOND, 0)
+                                    calendar.timeInMillis
+                                } catch (e: Exception) {
+                                    System.currentTimeMillis()
+                                }
+                            }
+                            onUseCoupon(selectedCoupon!!.id, count, parkingArea, parkingLotNumber, vehicleNumber, startTime)
+                            showUseDialog = false
                         }
                     }
                 ) {
-                    Text("Use Coupon")
+                    Text("Use")
                 }
             },
             dismissButton = {
-                TextButton(
-                    onClick = { 
-                        showDialog = false
-                        resetDialogFields()
-                    }
-                ) {
+                TextButton(onClick = { showUseDialog = false }) {
                     Text("Cancel")
                 }
             }

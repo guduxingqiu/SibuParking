@@ -156,7 +156,8 @@ class FirebaseCouponService {
         usedCount: Int,
         parkingArea: String,
         parkingLotNumber: String,
-        vehicleNumber: String
+        vehicleNumber: String,
+        startTime: Long
     ): Result<Boolean> {
         return try {
             val userId = auth.currentUser?.uid ?: return Result.failure(Exception("User not logged in"))
@@ -177,10 +178,10 @@ class FirebaseCouponService {
             
             // 计算过期时间
             val expirationTime = when (CouponType.valueOf(typeStr)) {
-                CouponType.MINUTES_30 -> System.currentTimeMillis() + (30 * 60 * 1000 * usedCount) // 30分钟
-                CouponType.HOUR_1 -> System.currentTimeMillis() + (60 * 60 * 1000 * usedCount) // 1小时
-                CouponType.HOURS_2 -> System.currentTimeMillis() + (2 * 60 * 60 * 1000 * usedCount) // 2小时
-                CouponType.HOURS_24 -> System.currentTimeMillis() + (24 * 60 * 60 * 1000 * usedCount) // 24小时
+                CouponType.MINUTES_30 -> startTime + (30 * 60 * 1000 * usedCount) // 30分钟
+                CouponType.HOUR_1 -> startTime + (60 * 60 * 1000 * usedCount) // 1小时
+                CouponType.HOURS_2 -> startTime + (2 * 60 * 60 * 1000 * usedCount) // 2小时
+                CouponType.HOURS_24 -> startTime + (24 * 60 * 60 * 1000 * usedCount) // 24小时
             }
             
             // 更新已使用次数和剩余次数
@@ -188,6 +189,7 @@ class FirebaseCouponService {
             val newRemainingUses = remainingUses - usedCount
             
             android.util.Log.d("FirebaseCouponService", "Updating coupon $couponId: usedCount to $newUsedCount, remainingUses to $newRemainingUses")
+            android.util.Log.d("FirebaseCouponService", "Start time: $startTime, Expiration time: $expirationTime")
             
             // 更新Firestore文档
             firestore.collection("coupons").document(couponId)
@@ -208,7 +210,7 @@ class FirebaseCouponService {
                 parkingArea = parkingArea,
                 parkingLotNumber = parkingLotNumber,
                 vehicleNumber = vehicleNumber,
-                timestamp = System.currentTimeMillis(),
+                timestamp = startTime,
                 status = CouponStatus.ACTIVE,
                 expirationTime = expirationTime
             )

@@ -32,7 +32,7 @@ fun UserHomeScreen(
                         Icon(Icons.Default.Person, contentDescription = "User Menu")
                     }
                 }
-            )
+                )
         }
     ) { paddingValues ->
         Column(

@@ -244,9 +244,9 @@ class MainActivity : ComponentActivity() {
                                     currentScreen = AppScreen.USER_HOME
                                     loadCoupons()
                                 },
-                                onUseCoupon = { couponId, usedCount, parkingArea, parkingLotNumber, vehicleNumber ->
+                                onUseCoupon = { couponId, usedCount, parkingArea, parkingLotNumber, vehicleNumber, startTime ->
                                     isLoading = true
-                                    useCoupon(couponId, usedCount, parkingArea, parkingLotNumber, vehicleNumber) { success ->
+                                    useCoupon(couponId, usedCount, parkingArea, parkingLotNumber, vehicleNumber, startTime) { success ->
                                         isLoading = false
                                         if (success) {
                                             loadCoupons() // Reload coupons after use
@@ -492,7 +492,8 @@ class MainActivity : ComponentActivity() {
                                     currentScreen = AppScreen.CHECK_COUPON
                                 },
                                 onNavigateToReportManagement = {
-                                    currentScreen = AppScreen.REPORT_MANAGEMENT
+                                    currentScreen = AppScreen.REPORT
+                                    loadReports()
                                 },
                                 onNavigateToStaffMenu = {
                                     currentScreen = AppScreen.STAFF_MENU
@@ -650,7 +651,8 @@ class MainActivity : ComponentActivity() {
         usedCount: Int, 
         parkingArea: String, 
         parkingLotNumber: String, 
-        vehicleNumber: String, 
+        vehicleNumber: String,
+        startTime: Long,
         onComplete: (Boolean) -> Unit
     ) {
         lifecycleScope.launch {
@@ -660,7 +662,8 @@ class MainActivity : ComponentActivity() {
                     usedCount = usedCount,
                     parkingArea = parkingArea,
                     parkingLotNumber = parkingLotNumber,
-                    vehicleNumber = vehicleNumber
+                    vehicleNumber = vehicleNumber,
+                    startTime = startTime
                 )
                 
                 if (result.isSuccess) {
